@@ -2,7 +2,7 @@
 <header><b>Asistencia</b><button id="homeButton" class="text-button" hidden>Inicio</button><button id="menuButton" class="text-button">Archivo</button></header>
 <main><p id="message" role="status" aria-live="polite" hidden></p>
 <section id="welcome" class="home"><h1>Elige un grupo</h1><button id="openFile">Cargar otro Excel</button><p id="recentNote" class="muted" hidden>Grupos en este dispositivo · Un Excel por grupo</p><div id="recentGroups"></div><section id="absences" hidden><div class="section-head"><h2>Última toma · Faltas</h2><span id="absentCount"></span></div><ol id="absentList"></ol><p id="noAbsences" hidden>Sin faltas.</p><button id="resumeDay" class="secondary">Añadir a alguien</button><div class="save-row"><button id="saveFile" class="text-button">Guardar archivo</button><p id="saveStatus" class="muted" role="status"></p></div></section></section>
-<section id="workspace" hidden><p id="dateLabel" class="muted"></p><label class="sr" for="group">Grupo</label><select id="group"></select><p id="sourceFile" class="muted"></p>
+<section id="workspace" hidden><p id="dateLabel" class="muted"></p><h2 id="group"></h2><p id="sourceFile" class="muted"></p>
 <div id="daily"><p id="dayStatus" class="muted"></p><h1 id="count"></h1><button id="startDay">Tomar asistencia</button><button id="finishDay" class="text-button" hidden>Finalizar asistencia</button></div>
 
 <details id="manualList"><summary>Lista y correcciones</summary><div id="attendanceList"></div><details><summary>Introducir QR como texto</summary><form id="scanForm"><label>Contenido del QR<input id="rawQR" required autocomplete="off"></label><button>Registrar</button></form></details></details>

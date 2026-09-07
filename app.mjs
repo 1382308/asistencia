@@ -39,7 +39,7 @@ function render(){
  if(!data.groups.some(g=>g.id===groupId))groupId=data.groups[0]?.id||'';
  $('welcome').hidden=!home;$('workspace').hidden=home||!data.students.length;$('homeButton').hidden=home;renderHome();
  $('sourceFile').textContent=data.idoceo?`Archivo: ${data.idoceo.filename}`:'Registro de una versión anterior. Carga el Excel del grupo para añadir las fechas en él.';
- options($('group'),data.groups.map(g=>[g.id,g.name]),groupId);
+ $('group').textContent=data.groups.find(g=>g.id===groupId)?.name||'';
  $('dateLabel').textContent=new Date(day+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
  const s=session(),students=data.students.filter(s=>s.groupId===groupId);
  $('dayStatus').textContent=s?.closed?'Hoy · Ya registrada':s?'Hoy · En curso':'Hoy';
@@ -55,7 +55,6 @@ function render(){
  if(!data.idoceo){$('startDay').hidden=false;$('startDay').textContent='Cargar Excel del grupo';$('finishDay').hidden=true;$('resumeDay').hidden=true;$('saveFile').hidden=true;}else{$('resumeDay').hidden=false;$('saveFile').hidden=false;}
 }
 function refreshDay(){const today=localDate();if(today!==day){stopCamera();day=today;render();notice('Ya puedes iniciar la asistencia de hoy.');}}
-$('group').onchange=()=>{stopCamera();groupId=$('group').value;$('saveStatus').textContent='';render();};
 $('menuButton').onclick=()=>$('menuDialog').showModal();$('closeMenu').onclick=()=>$('menuDialog').close();
 function pickFile(){if(sharing||busy)return;$('menuDialog').close();$('fileInput').click();}
 function goHome(){stopCamera();home=true;render();window.scrollTo(0,0);}
