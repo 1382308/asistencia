@@ -1,4 +1,4 @@
-import {empty,uid,groupFromFilename,localDate,startDaily,validate} from './core.mjs';
+import {empty,uid,groupFromFilename,localDate,startDaily,validate,fileSnapshot} from './core.mjs';
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL='http://schemas.openxmlformats.org/package/2006/relationships';
 const META='xl/worksheets/asistencia_app.xml';
@@ -25,6 +25,7 @@ export function readIdoceo(bytes,filename){
   const meta=parse(get(zip,META));let payload;try{payload=JSON.parse(all(meta,'t').map(t=>t.textContent).join(''));validate(payload.data);}catch{throw Error('El registro QR del Excel está dañado.');}
   const book=XLSX.read(bytes,{type:'array'}),sheet=book.Sheets[payload.data.idoceo.sheetName];
   if(!sheet||JSON.stringify(XLSX.utils.sheet_to_json(sheet,{header:1,defval:''}))!==JSON.stringify(payload.values))throw Error('El Excel se modificó fuera de la app. Abre la última copia guardada por Asistencia para conservar los QR y registros.');
+  payload.data.idoceo.filename=filename;
   return payload.data;
  }
  const name=groupFromFilename(filename);if(!name)throw Error('El nombre debe indicar el grupo, por ejemplo idoceo_Grupo_I.xlsx.');
@@ -74,7 +75,7 @@ export function writeIdoceo(data){
  const type=types.createElementNS(types.documentElement.namespaceURI,'Override');type.setAttribute('PartName','/'+META);type.setAttribute('ContentType','application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml');types.documentElement.append(type);
  put(zip,'xl/workbook.xml',xml(wb));put(zip,'xl/_rels/workbook.xml.rels',xml(rels));put(zip,'[Content_Types].xml',xml(types));
  const preview=XLSX.read(XLSX.CFB.write(zip,{type:'array',fileType:'zip'}),{type:'array'});
- const payload=JSON.stringify({data,values:XLSX.utils.sheet_to_json(preview.Sheets[info.sheetName],{header:1,defval:''})});
+ const payload=JSON.stringify({data:fileSnapshot(data),values:XLSX.utils.sheet_to_json(preview.Sheets[info.sheetName],{header:1,defval:''})});
  const meta=parse(`<worksheet xmlns="${NS}"><sheetData/></worksheet>`),body=all(meta,'sheetData')[0];
  for(let i=0,r=1;i<payload.length;r++){let end=Math.min(i+20000,payload.length);if(end<payload.length&&/[\uD800-\uDBFF]/.test(payload[end-1]))end--;const row=meta.createElementNS(NS,'row');row.setAttribute('r',r);row.append(textCell(meta,'A'+r,payload.slice(i,end)));body.append(row);i=end;}
  put(zip,META,xml(meta));return XLSX.CFB.write(zip,{type:'array',fileType:'zip',compression:true});

@@ -1,4 +1,4 @@
-import {validate,exportDailyCSV,exportCSV,parseCSV} from './core.mjs';
+import {validate,exportDailyCSV,exportCSV,parseCSV,fileSnapshot} from './core.mjs';
 export const FILE_NAME='Asistencia.xlsx';
 export const FILE_TYPE='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export function registerRows(data){
@@ -25,7 +25,7 @@ export function createFileBytes(data,XLSX=globalThis.XLSX){
  ['Datos_app','Hoja de recuperación. No eliminar ni editar. No está cifrada.'],
  ['Iconos','✔️ Presente · ❌ Falta · ⌛️ Retraso. Pendiente y justificado se conservan como texto.'],
  ],[22,100]);
- const text=JSON.stringify({data,tables:{Registro:rows,Detalle:detailRows}});const chunks=[['ASISTENCIA_ARCHIVO_V1']];
+ const text=JSON.stringify({data:fileSnapshot(data),tables:{Registro:rows,Detalle:detailRows}});const chunks=[['ASISTENCIA_ARCHIVO_V1']];
  for(let i=0;i<text.length;){let end=Math.min(i+20000,text.length);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;chunks.push([text.slice(i,end)]);i=end;}
  append('Datos_app',chunks,[24]);book.Workbook={Sheets:book.SheetNames.map(name=>({name,Hidden:name==='Datos_app'?1:0}))};
  return XLSX.write(book,{bookType:'xlsx',type:'array',compression:true});

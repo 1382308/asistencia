@@ -1,4 +1,13 @@
 export const empty = () => ({version:1,revision:0,groups:[],students:[],sessions:[]});
+// Recent files are local workspace state, never part of a group's Excel.
+export function fileSnapshot(data){const {recent,...snapshot}=data;return structuredClone(snapshot);}
+export function fileKey(data){return data.groups.map(g=>g.name.trim().normalize('NFC').toLocaleLowerCase('es')).sort().join('|');}
+export function recentFiles(data){return [fileSnapshot(data),...(data.recent||[])].filter(d=>d.students.length);}
+export function selectFile(current,incoming){
+ const next=fileSnapshot(incoming),key=fileKey(next);
+ next.recent=recentFiles(current).filter(d=>fileKey(d)!==key);
+ next.revision=current.revision;return next;
+}
 export const statusSymbol = status => ({presente:'✔️',ausente:'❌',retraso:'⌛️'})[status] || status;
 const attended = status => ['presente','retraso'].includes(status);
 export const uid = () => crypto.randomUUID();
