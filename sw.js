@@ -1,4 +1,4 @@
-const CACHE='aula-static-v13';
+const CACHE='aula-static-v14';
 const ASSETS=['./','./index.html','./style.css','./app.mjs','./core.mjs','./file-store.mjs','./idoceo.mjs','./vendor/xlsx.mini.min.js','./vendor/jsQR.js','./manifest.webmanifest','./icon.svg','./icon.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));

@@ -2,6 +2,7 @@ import {readIdoceo,writeIdoceo,idoceoRows} from './idoceo.mjs';
 import {createFileBytes,restoreFileBytes,FILE_NAME,FILE_TYPE} from './file-store.mjs';
 import {empty,bindQR,mark,scan,validate,localDate,dailySession,startDaily,finishDaily,reopenDaily,exportDailyCSV,parseCSV,importRosterFile,groupFromFilename,linkAndScan,fileKey,recentFiles,selectFile} from './core.mjs';
 const $=id=>document.getElementById(id);let db,data=empty(),groupId='',day=localDate(),busy=false,stream=null,generation=0,pendingQR='',lastScan='',lastAt=0,noticeTimer,sharing=false,home=true,finishedKey='';
+const sessionChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('aula-session'):null;
 function notice(text,error=false){clearTimeout(noticeTimer);$('message').textContent=text;$('message').className=error?'error':'';$('message').hidden=false;if($('cameraDialog').open)$('cameraMessage').textContent=text;if($('linkDialog').open&&error)$('linkDialog').querySelector('.muted').textContent=text;if(!error)noticeTimer=setTimeout(()=>{$('message').hidden=true;},4500);}
 const safe=fn=>async e=>{try{await fn(e);}catch(err){notice(err.message||'No se pudo completar la acción.',true);}};
 function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open('aula-asistencia',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Cierra otras ventanas de la app y vuelve a abrirla.'));});}
@@ -22,6 +23,7 @@ async function activateFile(key,action){
 }
 function renderHome(){
  const files=recentFiles(data).sort((a,b)=>a.groups[0].name.localeCompare(b.groups[0].name,'es',{numeric:true}));
+ $('logoutButton').disabled=sharing||busy||!files.length;
  $('menuButton').hidden=!files.length;$('homeTitle').hidden=!files.length;$('homeTitle').textContent='Elige un grupo';$('openFile').textContent='Cargar grupo';$('openFile').className=files.length?'text-button':'';
  $('recentGroups').replaceChildren();$('recentNote').hidden=!files.length;$('openFile').disabled=sharing||busy;
  for(const file of files){
@@ -53,6 +55,30 @@ function render(){
 }
 function refreshDay(){const today=localDate();if(today!==day){stopCamera();home=true;day=today;render();notice('Ya puedes iniciar la asistencia de hoy.');}}
 $('menuButton').onclick=$('captureMenu').onclick=()=>$('menuDialog').showModal();$('closeMenu').onclick=()=>$('menuDialog').close();
+function resetSessionView(){
+ stopCamera();for(const id of ['menuDialog','logoutDialog'])if($(id).open)$(id).close();
+ home=true;groupId='';day=localDate();finishedKey='';lastScan='';lastAt=0;
+ for(const id of ['rawQR','findStudent','fileInput'])$(id).value='';
+ for(const id of ['cameraMessage','cameraTitle','linkStudents','saveStatus','logoutMessage'])$(id).replaceChildren();
+ canvas.width=0;canvas.height=0;clearTimeout(noticeTimer);$('message').hidden=true;$('message').textContent='';
+ render();window.scrollTo(0,0);
+}
+async function logout(){
+ if(sharing||busy)return;
+ await change(d=>{const revision=d.revision;for(const k of Object.keys(d))delete d[k];Object.assign(d,empty(),{revision});},false);
+ resetSessionView();sessionChannel?.postMessage('logout');
+}
+$('logoutButton').onclick=safe(async()=>{
+ if(sharing||busy)return;
+ const pending=recentFiles(data).filter(d=>d.exportPending||d.exportPending!==false&&d.sessions.length);
+ if(pending.length){$('logoutMessage').textContent=`${pending.length===1?'Hay un Excel pendiente de guardar.':'Hay '+pending.length+' Excel pendientes de guardar.'} Si cierras la sesión, perderás los cambios que no hayas guardado. Los Excel de Archivos no se borran.`;$('logoutDialog').showModal();}
+ else await logout();
+});
+$('cancelLogout').onclick=()=>{$('logoutDialog').close();$('menuDialog').close();goHome();};
+$('confirmLogout').onclick=safe(async()=>{try{await logout();}catch(e){$('logoutMessage').textContent=e.message;}});
+async function syncLogout(){if(!db)return;try{const latest=validate(await read());if(!latest.students.length&&latest.revision>data.revision){data=latest;resetSessionView();}}catch{}}
+if(sessionChannel)sessionChannel.onmessage=e=>{if(e.data==='logout')syncLogout();};
+window.addEventListener('pageshow',syncLogout);
 function pickFile(){if(sharing||busy)return;$('menuDialog').close();$('fileInput').click();}
 function goHome(){stopCamera();home=true;render();window.scrollTo(0,0);}
 $('openFile').onclick=pickFile;
@@ -100,6 +126,6 @@ async function startCamera(){
 
 const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
 async function tick(current){if(!stream||current!==generation)return;try{const v=$('video');if(!pendingQR&&!$('correctionDialog').open&&!$('menuDialog').open&&v.readyState>=2&&v.videoWidth){const scale=Math.min(1,900/v.videoWidth);canvas.width=Math.round(v.videoWidth*scale);canvas.height=Math.round(v.videoHeight*scale);ctx.drawImage(v,0,0,canvas.width,canvas.height);const frame=ctx.getImageData(0,0,canvas.width,canvas.height),qr=window.jsQR(frame.data,frame.width,frame.height,{inversionAttempts:'attemptBoth'});if(qr&&(qr.data!==lastScan||Date.now()-lastAt>3000)){lastScan=qr.data;lastAt=Date.now();await acceptQR(qr.data);}}}catch(e){$('cameraMessage').textContent=e.message;}if(stream&&current===generation)setTimeout(()=>tick(current),170);}
-$('stopCamera').onclick=goHome;$('cameraDialog').addEventListener('cancel',e=>{e.preventDefault();goHome();});document.addEventListener('visibilitychange',()=>{if(document.hidden)goHome();else refreshDay();});window.addEventListener('pagehide',stopCamera);setInterval(refreshDay,30000);
+$('stopCamera').onclick=goHome;$('cameraDialog').addEventListener('cancel',e=>{e.preventDefault();goHome();});document.addEventListener('visibilitychange',()=>{if(document.hidden)goHome();else{refreshDay();syncLogout();}});window.addEventListener('pagehide',stopCamera);setInterval(refreshDay,30000);
 try{db=await openDB();data=validate(await read());render();navigator.storage?.persist?.().catch(()=>{});}catch(e){notice(`No se pudo abrir el registro: ${e.message}`,true);$('openFile').disabled=true;}
 if('serviceWorker'in navigator&&isSecureContext){try{await navigator.serviceWorker.register('./sw.js');await navigator.serviceWorker.ready;$('offlineStatus').textContent='Lista sin conexión. Prueba abrirla en modo avión antes de clase.';}catch{$('offlineStatus').textContent='Abre la app con internet para preparar el modo sin conexión.';}}else $('offlineStatus').textContent='Necesitas HTTPS para cámara y uso sin conexión.';
