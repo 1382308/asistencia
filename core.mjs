@@ -11,6 +11,7 @@ export function selectFile(current,incoming){
 export const statusSymbol = status => ({presente:'✔️',ausente:'❌',retraso:'⌛️'})[status] || status;
 const attended = status => ['presente','retraso'].includes(status);
 export const uid = () => crypto.randomUUID();
+const validPreferredName = name => typeof name==='string'&&name.length<=300&&Boolean(name.trim());
 export function bindQR(d,id,qr){
  if(typeof qr!=='string'||!qr.length||qr.length>2048) throw Error('QR vacío o demasiado largo.');
  const s=d.students.find(s=>s.id===id); if(!s) throw Error('Elige un alumno.');
@@ -62,7 +63,7 @@ export function validate(d){
  const ids=new Set(); for(const a of [d.groups,d.students,d.sessions])for(const x of a){if(!x||!id(x.id)||ids.has(x.id))fail();ids.add(x.id);}
  for(const g of d.groups)if(!str(g.name)||!g.name.trim())fail();
  const groupIds=new Set(d.groups.map(g=>g.id)),studentIds=new Set(d.students.map(s=>s.id)),qrs=new Set();
- for(const s of d.students){if(!groupIds.has(s.groupId)||!str(s.name)||!s.name.trim()||!str(s.code,200)||!str(s.qr,2048)||s.qr&&qrs.has(s.qr))fail();if(s.qr)qrs.add(s.qr);}
+ for(const s of d.students){if(!groupIds.has(s.groupId)||!str(s.name)||!s.name.trim()||!str(s.code,200)||!str(s.qr,2048)||s.qr&&qrs.has(s.qr)||s.preferredName!==undefined&&!validPreferredName(s.preferredName))fail();if(s.qr)qrs.add(s.qr);}
  const date=s=>typeof s==='string'&&Number.isFinite(Date.parse(s));
  for(const s of d.sessions){if(!groupIds.has(s.groupId)||!str(s.title)||!s.title.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||!date(s.date)||!Array.isArray(s.roster)||!s.records||typeof s.records!=='object'||Array.isArray(s.records))fail();const seen=new Set();if(s.closed!==undefined&&typeof s.closed!=='boolean')fail();if(s.finalizedAt!==undefined&&!date(s.finalizedAt))fail();if(s.closed&&!s.finalizedAt)fail();
  for(const r of s.roster){if(!r||!studentIds.has(r.id)||seen.has(r.id)||!str(r.name)||!str(r.code,200))fail();seen.add(r.id);}
@@ -141,8 +142,11 @@ export function exportDailyCSV(d,groupId){
  for(const r of roster.values())rows.push([d.groups.find(g=>g.id===groupId)?.name,r.name,r.code,...sessions.map(s=>!s.roster.some(x=>x.id===r.id)?'':statusSymbol(s.records[r.id]?.status||'pendiente'))]);
  const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';return '\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n');
 }
-export function linkAndScan(d,sessionId,studentId,qr){
+export function linkAndScan(d,sessionId,studentId,qr,preferredName){
  const s=d.sessions.find(s=>s.id===sessionId);if(!s||s.closed||!s.roster.some(r=>r.id===studentId))throw Error('El alumno no pertenece a una asistencia abierta.');
  const student=d.students.find(s=>s.id===studentId);if(student.qr&&student.qr!==qr)throw Error('Este alumno ya tiene otro QR. Corrígelo desde Archivo.');
- bindQR(d,studentId,qr);return scan(d,sessionId,qr);
+ if(preferredName!==undefined&&!validPreferredName(preferredName))throw Error('Escribe un nombre de entre 1 y 300 caracteres.');
+ bindQR(d,studentId,qr);const result=scan(d,sessionId,qr);
+ if(preferredName!==undefined)student.preferredName=preferredName.trim();
+ return result;
 }
