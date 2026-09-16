@@ -1,13 +1,164 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#5260ed"><meta name="apple-mobile-web-app-capable" content="yes"><title>Asistencia</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg"><link rel="apple-touch-icon" href="icon.png"><link rel="stylesheet" href="style.css"></head><body>
-<header><b>Asistencia</b><button id="menuButton" class="text-button">Opciones</button></header>
-<main><p id="message" role="status" aria-live="polite" hidden></p>
-<section id="welcome" class="home"><h1 id="homeTitle">Asistencia</h1><div id="recentGroups"></div><button id="openFile">Cargar grupo</button><p id="recentNote" class="muted" hidden>Solo en este dispositivo</p><details id="absences" hidden><summary id="absenceSummary"></summary><ol id="absentList"></ol></details><p id="saveStatus" class="muted" role="status"></p></section>
-</main>
-<input type="file" id="fileInput" accept=".xlsx" hidden>
-<dialog id="menuDialog"><div class="section-head"><h2>Opciones</h2><button id="closeMenu" class="text-button">Cerrar</button></div><p id="sourceFile" class="muted"></p><button id="saveMenu" class="secondary">Guardar Excel</button><details id="historyPanel"><summary>Historial del grupo abierto</summary><button id="exportMatrix" class="text-button">Exportar CSV</button><div id="historyTable" class="table-scroll"></div></details><details><summary>Corregir nombres o QR</summary><div id="studentList"></div></details><details><summary>Ayuda</summary><p>Carga un Excel por grupo. Toca su tarjeta para escanear; si ya terminaste hoy, puedes completar la misma toma.</p><p>Guarda el Excel actualizado en la carpeta original y elige Reemplazar. Contiene los QR y el historial de ese grupo.</p><p id="offlineStatus">Preparando uso sin conexión…</p><p>Las tarjetas solo corresponden a listas cargadas en este dispositivo. Los datos no se envían a GitHub.</p></details><button id="logoutButton" class="text-button logout-button">Cerrar sesión</button></dialog>
-<dialog id="logoutDialog"><h2>Antes de cerrar</h2><p id="logoutMessage"></p><div class="logout-actions"><button id="cancelLogout">Volver y guardar</button><button id="confirmLogout" class="text-button logout-button">Cerrar sin guardar</button></div></dialog>
-<dialog id="cameraDialog"><div class="section-head"><button id="stopCamera" class="text-button">Inicio</button><h2 id="cameraTitle"></h2><button id="captureMenu" class="text-button" aria-label="Opciones del grupo">⋯</button></div><video id="video" autoplay muted playsinline></video><div id="cameraMessage" role="status" aria-live="polite" aria-atomic="true">Apunta a una tarjeta.</div><p id="cameraCount" class="muted"></p><button id="retryCamera" class="secondary" hidden>Activar cámara</button><button id="finishCamera">Finalizar</button><button id="correctCamera" class="text-button">Corregir</button></dialog>
-<dialog id="correctionDialog"><div class="section-head"><h2>Corregir asistencia</h2><button id="closeCorrections" class="text-button">Listo</button></div><div id="attendanceList"></div><details><summary>Introducir QR como texto</summary><form id="scanForm"><label>Contenido del QR<input id="rawQR" required autocomplete="off"></label><button>Registrar</button></form></details></dialog>
-<dialog id="linkDialog"><div class="section-head"><h2>¿De quién es este QR?</h2><button id="cancelLink" class="text-button">Cancelar</button></div><p class="muted">Solo tendrás que elegirlo esta vez.</p><label class="sr" for="findStudent">Buscar alumno</label><input id="findStudent" type="search" placeholder="Buscar alumno" autocomplete="off"><div id="linkStudents"></div></dialog>
-<dialog id="nameDialog" aria-labelledby="nameTitle"><div class="section-head"><h2 id="nameTitle">¿Cómo le llamas?</h2><button id="cancelName" class="text-button">Cancelar</button></div><p id="studentFullName"></p><p class="muted">Elige su primer o segundo nombre, o escribe el que prefiera. Lo recordaremos para las siguientes clases.</p><div id="nameChoices" role="group" aria-label="Nombres disponibles"></div><form id="nameForm"><label for="preferredName">Nombre para mostrar</label><input id="preferredName" required maxlength="300" autocomplete="off" placeholder="Por ejemplo, Carlos" aria-describedby="nameError"><p id="nameError" role="alert"></p><button id="saveName">Guardar y registrar asistencia</button></form></dialog>
-<script src="vendor/xlsx.mini.min.js"></script><script src="vendor/jsQR.js"></script><script type="module" src="app.mjs"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Control de asistencia escolar sin conexión mediante escaneo de tarjetas QR">
+  <meta name="theme-color" content="#5260ed">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Asistencia">
+  <meta name="format-detection" content="telephone=no">
+
+  <title>Asistencia</title>
+
+  <!-- PWA & Iconos -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <!-- Estilos y precarga de módulo -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="app.mjs">
+</head>
+<body>
+  <header>
+    <b>Asistencia</b>
+    <button type="button" id="menuButton" class="text-button" aria-haspopup="dialog">Opciones</button>
+  </header>
+
+  <main>
+    <p id="message" role="status" aria-live="polite" hidden></p>
+
+    <section id="welcome" class="home">
+      <h1 id="homeTitle">Asistencia</h1>
+      <div id="recentGroups"></div>
+      <button type="button" id="openFile">Cargar grupo</button>
+      <p id="recentNote" class="muted" hidden>Solo en este dispositivo</p>
+
+      <details id="absences" hidden>
+        <summary id="absenceSummary"></summary>
+        <ol id="absentList"></ol>
+      </details>
+
+      <p id="saveStatus" class="muted" role="status"></p>
+    </section>
+  </main>
+
+  <!-- Selector de archivo oculto -->
+  <input type="file" id="fileInput" accept=".xlsx, .csv, .tsv" hidden aria-label="Seleccionar archivo de lista o grupo">
+
+  <!-- Diálogo: Opciones y Configuración -->
+  <dialog id="menuDialog" aria-labelledby="menuTitle">
+    <div class="section-head">
+      <h2 id="menuTitle">Opciones</h2>
+      <button type="button" id="closeMenu" class="text-button">Cerrar</button>
+    </div>
+    <p id="sourceFile" class="muted"></p>
+    <button type="button" id="saveMenu" class="secondary">Guardar Excel</button>
+
+    <details id="historyPanel">
+      <summary>Historial del grupo abierto</summary>
+      <button type="button" id="exportMatrix" class="text-button">Exportar CSV</button>
+      <div id="historyTable" class="table-scroll"></div>
+    </details>
+
+    <details>
+      <summary>Corregir nombres o QR</summary>
+      <div id="studentList"></div>
+    </details>
+
+    <details>
+      <summary>Ayuda</summary>
+      <p>Carga un Excel por grupo. Toca su tarjeta para escanear; si ya terminaste hoy, puedes completar la misma toma.</p>
+      <p>Guarda el Excel actualizado en la carpeta original y elige Reemplazar. Contiene los QR y el historial de ese grupo.</p>
+      <p id="offlineStatus">Preparando uso sin conexión…</p>
+      <p>Las tarjetas solo corresponden a listas cargadas en este dispositivo. Los datos no se envían a GitHub.</p>
+    </details>
+
+    <button type="button" id="logoutButton" class="text-button logout-button">Cerrar sesión</button>
+  </dialog>
+
+  <!-- Diálogo: Confirmación de salida sin guardar -->
+  <dialog id="logoutDialog" aria-labelledby="logoutTitle">
+    <h2 id="logoutTitle">Antes de cerrar</h2>
+    <p id="logoutMessage"></p>
+    <div class="logout-actions">
+      <button type="button" id="cancelLogout">Volver y guardar</button>
+      <button type="button" id="confirmLogout" class="text-button logout-button">Cerrar sin guardar</button>
+    </div>
+  </dialog>
+
+  <!-- Diálogo: Escaneo con Cámara -->
+  <dialog id="cameraDialog" aria-labelledby="cameraTitle">
+    <div class="section-head">
+      <button type="button" id="stopCamera" class="text-button">Inicio</button>
+      <h2 id="cameraTitle"></h2>
+      <button type="button" id="captureMenu" class="text-button" aria-label="Opciones del grupo">⋯</button>
+    </div>
+    <video id="video" autoplay muted playsinline aria-label="Vista previa de cámara para escanear QR"></video>
+    <div id="cameraMessage" role="status" aria-live="polite" aria-atomic="true">Apunta a una tarjeta.</div>
+    <p id="cameraCount" class="muted"></p>
+    <button type="button" id="retryCamera" class="secondary" hidden>Activar cámara</button>
+    <button type="button" id="finishCamera">Finalizar</button>
+    <button type="button" id="correctCamera" class="text-button">Corregir</button>
+  </dialog>
+
+  <!-- Diálogo: Corrección de Asistencia y QR manual -->
+  <dialog id="correctionDialog" aria-labelledby="correctionTitle">
+    <div class="section-head">
+      <h2 id="correctionTitle">Corregir asistencia</h2>
+      <button type="button" id="closeCorrections" class="text-button">Listo</button>
+    </div>
+    <div id="attendanceList"></div>
+    <details>
+      <summary>Introducir QR como texto</summary>
+      <form id="scanForm">
+        <label for="rawQR">Contenido del QR<input id="rawQR" type="text" required autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"></label>
+        <button type="submit">Registrar</button>
+      </form>
+    </details>
+  </dialog>
+
+  <!-- Diálogo: Vincular QR a un alumno -->
+  <dialog id="linkDialog" aria-labelledby="linkTitle">
+    <div class="section-head">
+      <h2 id="linkTitle">¿De quién es este QR?</h2>
+      <button type="button" id="cancelLink" class="text-button">Cancelar</button>
+    </div>
+    <p class="muted">Solo tendrás que elegirlo esta vez.</p>
+    <label class="sr" for="findStudent">Buscar alumno</label>
+    <input type="search" id="findStudent" placeholder="Buscar alumno" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    <div id="linkStudents"></div>
+  </dialog>
+
+  <!-- Diálogo: Nombre preferido del alumno -->
+  <dialog id="nameDialog" aria-labelledby="nameTitle">
+    <div class="section-head">
+      <h2 id="nameTitle">¿Cómo le llamas?</h2>
+      <button type="button" id="cancelName" class="text-button">Cancelar</button>
+    </div>
+    <p id="studentFullName"></p>
+    <p class="muted">Escribe cómo le llamas o cómo prefiere que le digan. Lo recordaremos para las siguientes clases.</p>
+    <form id="nameForm">
+      <label for="preferredName">Nombre para mostrar</label>
+      <input type="text" id="preferredName" required maxlength="300" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Por ejemplo, Carlos" aria-describedby="nameError">
+      <p id="nameError" role="alert"></p>
+      <button type="submit" id="saveName">Guardar y registrar asistencia</button>
+    </form>
+  </dialog>
+
+  <!-- Aviso sin JavaScript -->
+  <noscript>
+    <p style="text-align: center; padding: 20px; color: #a3384a;">
+      Esta aplicación requiere JavaScript para escanear y gestionar la asistencia.
+    </p>
+  </noscript>
+
+  <!-- Scripts -->
+  <script defer src="vendor/xlsx.mini.min.js"></script>
+  <script defer src="vendor/jsQR.js"></script>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
