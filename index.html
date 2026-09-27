@@ -34,8 +34,9 @@
     <section id="welcome" class="home">
       <h1 id="homeTitle">Asistencia</h1>
       <div id="recentGroups"></div>
-      <button type="button" id="openFile">Cargar grupo</button>
-      <p id="recentNote" class="muted" hidden>Solo en este dispositivo</p>
+      <button type="button" id="openFile">Cargar lista CSV o restaurar Excel</button>
+      <button type="button" id="downloadRosterTemplate" class="text-button">Descargar plantilla CSV</button>
+      <p id="recentNote" class="muted" hidden>Guarda el Excel actualizado después de cada clase para conservar el grupo.</p>
 
       <details id="absences" hidden>
         <summary id="absenceSummary"></summary>
@@ -47,7 +48,7 @@
   </main>
 
   <!-- Selector de archivo oculto -->
-  <input type="file" id="fileInput" accept=".xlsx, .csv, .tsv" hidden aria-label="Seleccionar archivo de lista o grupo">
+  <input type="file" id="fileInput" accept=".xlsx, .csv" hidden aria-label="Seleccionar lista CSV o Excel maestro">
 
   <!-- Diálogo: Opciones y Configuración -->
   <dialog id="menuDialog" aria-labelledby="menuTitle">
@@ -71,8 +72,9 @@
 
     <details>
       <summary>Ayuda</summary>
-      <p>Carga un Excel por grupo. Toca su tarjeta para escanear; si ya terminaste hoy, puedes completar la misma toma.</p>
-      <p>Guarda el Excel actualizado en la carpeta original y elige Reemplazar. Contiene los QR y el historial de ese grupo.</p>
+      <p>Para crear un grupo, descarga la plantilla CSV, agrega una fila por alumno en la columna nombre y cárgala. Escribe el nombre del grupo cuando la app lo pida. Para un grupo existente, carga su último Excel maestro.</p>
+      <p>Al finalizar cada clase, guarda el Excel actualizado y reemplaza la copia anterior. Conserva la lista, los QR, los nombres preferidos y el historial.</p>
+      <p>Si usas iDoceo, también puedes cargar y actualizar su Excel de asistencia.</p>
       <p id="offlineStatus">Preparando uso sin conexión…</p>
       <p>Las tarjetas solo corresponden a listas cargadas en este dispositivo. Los datos no se envían a GitHub.</p>
     </details>
