@@ -2,6 +2,20 @@ export const empty = () => ({version:1,revision:0,groups:[],students:[],sessions
 // Recent files are local workspace state, never part of a group's Excel.
 export function fileSnapshot(data){const {recent,...snapshot}=data;return structuredClone(snapshot);}
 export function fileKey(data){return data.groups.map(g=>g.name.trim().normalize('NFC').toLocaleLowerCase('es')).sort().join('|');}
+export function sameClassroomData(left,right){
+ const snapshot=data=>{
+  const groups=new Map(data.groups.map(g=>[g.id,g.name]));
+  return {
+   groups:data.groups.map(g=>g.name),
+   students:data.students.map(s=>[groups.get(s.groupId),s.name,s.code||'',s.qr||'',s.preferredName||'']),
+   sessions:data.sessions.map(s=>[
+    groups.get(s.groupId),s.title,s.date,Boolean(s.closed),s.nativeColumn??null,
+    s.roster.map(r=>{const record=s.records[r.id];return [r.name,r.code||'',record?.status||'pendiente',record?.time??null,record?.source||''];})
+   ])
+  };
+ };
+ return JSON.stringify(snapshot(left))===JSON.stringify(snapshot(right));
+}
 export function recentFiles(data){return [fileSnapshot(data),...(data.recent||[])].filter(d=>d.students.length);}
 export function selectFile(current,incoming){
  const next=fileSnapshot(incoming),key=fileKey(next);
@@ -43,18 +57,24 @@ export function parseCSV(text){
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++;}else if(!quoted&&field.length)throw Error('Comillas inválidas en CSV.');else quoted=!quoted;}else if(!quoted&&(c===delimiter||c==='\n'||c==='\r')){row.push(field);field='';if(c!==delimiter){if(c==='\r'&&text[i+1]==='\n')i++;if(row.some(x=>x.trim()))rows.push(row);row=[];}}else field+=c;}
  if(quoted)throw Error('CSV con comillas sin cerrar.');row.push(field);if(row.some(x=>x.trim()))rows.push(row);return rows;
 }
-export function importRoster(d,groupId,text){
- if(!d.groups.some(g=>g.id===groupId))throw Error('Elige un grupo.');
- const rows=parseCSV(text);const headers=rows.shift()?.map(x=>x.trim().toLowerCase());const ni=headers?.indexOf('nombre');if(ni<0||ni===undefined)throw Error('La primera fila debe incluir nombre; opcionales: matricula, qr.');
- const ci=headers.indexOf('matricula'),qi=headers.indexOf('qr');const added=[];
- for(const [i,r] of rows.entries()){
- const name=(r[ni]||'').trim(),code=ci<0?'':(r[ci]||'').trim(),qr=qi<0?'':r[qi]||'';
- if(!name)throw Error(`Fila ${i+2}: falta el nombre.`);
- if(code&&[...d.students,...added].some(s=>s.groupId===groupId&&s.code===code))throw Error(`Fila ${i+2}: matrícula repetida (${code}). No se importó la lista.`);
- if(qr&&[...d.students,...added].some(s=>s.qr===qr))throw Error(`Fila ${i+2}: QR repetido. No se importó la lista.`);
- if(name.length>300||code.length>200||qr.length>2048)throw Error(`Fila ${i+2}: dato demasiado largo.`);
- added.push({id:uid(),groupId,name,code,qr});
- }if(!added.length)throw Error('La lista no contiene alumnos.');d.students.push(...added);return added.length;
+export function importRosterCSV(text,groupName=''){
+ const group=String(groupName||'').trim();
+ if(!group||group.length>120)throw Error('Escribe el nombre del grupo (máximo 120 caracteres).');
+ const rows=parseCSV(text);
+ if(!rows.length||rows[0].length!==1||rows[0][0].trim().toLocaleLowerCase('es')!=='nombre')throw Error('Usa la plantilla CSV de una sola columna llamada nombre.');
+ const names=rows.slice(1);
+ if(!names.length)throw Error('La lista CSV está vacía.');
+ const d=empty(),g={id:uid(),name:group},seen=new Set();d.groups.push(g);
+ for(const [i,row] of names.entries()){
+  if(row.length!==1)throw Error(`Fila ${i+2}: la plantilla solo permite la columna nombre.`);
+  const name=(row[0]||'').replace(/\s+/g,' ').trim();
+  if(!name)throw Error(`Fila ${i+2}: falta el nombre.`);
+  if(name.length>300)throw Error(`Fila ${i+2}: el nombre supera 300 caracteres.`);
+  const key=name.normalize('NFC').toLocaleLowerCase('es');
+  if(seen.has(key))throw Error(`Fila ${i+2}: el nombre se repite. Completa los apellidos para distinguir a cada alumno.`);
+  seen.add(key);d.students.push({id:uid(),groupId:g.id,name,code:'',qr:''});
+ }
+ return validate(d);
 }
 export function validate(d){
  const fail=()=>{throw Error('El archivo no es un respaldo válido de Asistencia.');};
@@ -72,8 +92,8 @@ export function validate(d){
 }
 export function exportCSV(d,sessions=d.sessions){
  const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';
- const rows=[['grupo','sesion','fecha','matricula','nombre','estado','hora_local','hora_iso','origen']];
- for(const s of sessions)for(const r of s.roster){const a=s.records[r.id]; rows.push([d.groups.find(g=>g.id===s.groupId)?.name,s.title,s.date,r.code,r.name,statusSymbol(a?.status||'pendiente'),a?.time?new Date(a.time).toLocaleString('es-MX'):'',a?.time||'',a?.source||'']);}
+ const rows=[['grupo','sesion','fecha','nombre','estado','hora_local','hora_iso','origen']];
+ for(const s of sessions)for(const r of s.roster){const a=s.records[r.id]; rows.push([d.groups.find(g=>g.id===s.groupId)?.name,s.title,s.date,r.name,statusSymbol(a?.status||'pendiente'),a?.time?new Date(a.time).toLocaleString('es-MX'):'',a?.time||'',a?.source||'']);}
  return '\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n');
 }
 
@@ -89,57 +109,24 @@ export function finishDaily(d,id,now=new Date().toISOString()){
  s.closed=true;s.finalizedAt=now;return s;
 }
 export function reopenDaily(d,id){const s=d.sessions.find(s=>s.id===id);if(!s)throw Error('No existe el registro.');s.closed=false;return s;}
-export function prepareRoster(text,groupName=''){
- const rows=parseCSV(text);if(!rows.length)throw Error('La lista está vacía.');
- const headers=rows[0].map(x=>x.trim().toLowerCase());
- if(headers.includes('grupo')&&headers.includes('nombre'))return text;
- const named=headers.findIndex(x=>['nombre','nombre completo','alumno'].includes(x));
- const hasHeader=named>=0;const names=hasHeader?rows.slice(1):rows;
- if(!hasHeader&&names.some(r=>r.slice(1).some(x=>x.trim())))throw Error('Este CSV tiene columnas sin identificar. Usa encabezados grupo,nombre o un listado de iDoceo con nombres y columnas vacías.');
- if(!groupName.trim())throw Error('Selecciona un archivo como idoceo_Grupo_I.csv para obtener el grupo, o pega un CSV con columnas grupo,nombre.');
- const cell=x=>'"'+String(x).replaceAll('"','""')+'"';
- const output=[['grupo','nombre','matricula','qr']];
- for(const row of names){const name=(row[hasHeader?named:0]||'').trim();if(!name)throw Error('Hay una fila con datos pero sin nombre.');const get=key=>hasHeader&&headers.includes(key)?row[headers.indexOf(key)]||'':'';output.push([groupName.trim(),name,get('matricula'),get('qr')]);}
- return output.map(row=>row.map(cell).join(',')).join('\r\n');
-}
 export function groupFromFilename(name){
- if(!/\.(csv|tsv|xlsx)$/i.test(name))return '';
- const stem=name.replace(/\.(csv|tsv|xlsx)$/i,'').replace(/^idoceo[ _-]+/i,'').trim();
+ if(!/\.xlsx$/i.test(name))return '';
+ const stem=name.replace(/\.xlsx$/i,'').replace(/^idoceo[ _-]+/i,'').trim();
  const match=stem.match(/^grupo[ _-]+(.+)$/i);if(!match)return '';
  const suffix=match[1].replace(/[_]+/g,' ').trim();return suffix?`Grupo ${suffix}`:'';
 }
-export function importRosterFile(d,text,filename){
- const group=groupFromFilename(filename);if(!group)throw Error('No se reconoce el grupo en el nombre del archivo. Usa, por ejemplo, idoceo_Grupo_I.csv o Grupo_II.csv.');
- const rows=parseCSV(text),h=rows[0]?.map(x=>x.trim().toLowerCase());
- if(h?.includes('grupo')&&h.includes('nombre')){
-  const index=h.indexOf('grupo');if(rows.slice(1).some(r=>(r[index]||'').trim().toLowerCase()!==group.toLowerCase()))throw Error('El grupo dentro del CSV no coincide con el nombre del archivo. Revisa el archivo antes de cargarlo.');
- }
- return importGroups(d,text,group);
-}
-export function importGroups(d,text,groupName=''){
- text=prepareRoster(text,groupName);
- const next=structuredClone(d),rows=parseCSV(text),h=rows.shift()?.map(x=>x.trim().toLowerCase());
- if(!h||!h.includes('grupo')||!h.includes('nombre'))throw Error('El CSV debe tener encabezados grupo,nombre. Opcionales: matricula,qr.');
- if(!rows.length)throw Error('La lista está vacía.');
- const norm=x=>x.trim().toLocaleLowerCase('es');let added=0,skipped=0;const seen=new Set();
- for(const [i,row]of rows.entries()){
- const get=k=>h.includes(k)?(row[h.indexOf(k)]||'').trim():'';const group=get('grupo'),name=get('nombre'),code=get('matricula'),qr=h.includes('qr')?(row[h.indexOf('qr')]||''):'';
- if(!group||!name)throw Error(`Fila ${i+2}: faltan grupo o nombre.`);
- if(group.length>120||name.length>300||code.length>200||qr.length>2048)throw Error(`Fila ${i+2}: dato demasiado largo.`);
- let g=next.groups.find(g=>norm(g.name)===norm(group));if(!g){g={id:uid(),name:group};next.groups.push(g);}
- const key=JSON.stringify([g.id,code?'code':'name',code||norm(name)]);if(seen.has(key))throw Error(`Fila ${i+2}: alumno repetido. Para homónimos usa matrículas distintas.`);seen.add(key);
- const matches=next.students.filter(s=>s.groupId===g.id&&(code?s.code===code:norm(s.name)===norm(name)));
- if(matches.length>1)throw Error(`Fila ${i+2}: nombre ambiguo. Usa matrícula.`);
- if(matches.length){const old=matches[0];if(qr&&old.qr&&qr!==old.qr)throw Error(`Fila ${i+2}: el alumno ya tiene otro QR. Cámbialo en Ajustes.`);if(qr)bindQR(next,old.id,qr);skipped++;continue;}
- const student={id:uid(),groupId:g.id,name,code,qr:''};next.students.push(student);if(qr)bindQR(next,student.id,qr);added++;
- }validate(next);d.groups=next.groups;d.students=next.students;return {added,skipped};
+export function rosterBackupFilename(groupName){
+ const safe=String(groupName||'').normalize('NFC').trim()
+  .replace(/[\\/:*?"<>|\u0000-\u001f]/g,'-').replace(/\s+/g,' ')
+  .replace(/[. ]+$/,'').slice(0,80)||'Grupo';
+ return `Asistencia - ${safe}.xlsx`;
 }
 export function exportDailyCSV(d,groupId){
  const sessions=d.sessions.filter(s=>s.groupId===groupId).slice().sort((a,b)=>a.date.localeCompare(b.date));
  const roster=new Map(d.students.filter(s=>s.groupId===groupId).map(s=>[s.id,s]));for(const s of sessions)for(const r of s.roster)if(!roster.has(r.id))roster.set(r.id,r);
  const counts=new Map();const headings=sessions.map(s=>{const n=(counts.get(s.date)||0)+1;counts.set(s.date,n);return n===1?s.date:`${s.date} (${n})`;});
- const rows=[['grupo','nombre','matricula',...headings]];
- for(const r of roster.values())rows.push([d.groups.find(g=>g.id===groupId)?.name,r.name,r.code,...sessions.map(s=>!s.roster.some(x=>x.id===r.id)?'':statusSymbol(s.records[r.id]?.status||'pendiente'))]);
+ const rows=[['grupo','nombre',...headings]];
+ for(const r of roster.values())rows.push([d.groups.find(g=>g.id===groupId)?.name,r.name,...sessions.map(s=>!s.roster.some(x=>x.id===r.id)?'':statusSymbol(s.records[r.id]?.status||'pendiente'))]);
  const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';return '\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n');
 }
 export function linkAndScan(d,sessionId,studentId,qr,preferredName){
