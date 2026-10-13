@@ -28,12 +28,12 @@ export const uid = () => crypto.randomUUID();
 const validPreferredName = name => typeof name==='string'&&name.length<=300&&Boolean(name.trim());
 export function bindQR(d,id,qr){
  if(typeof qr!=='string'||!qr.length||qr.length>2048) throw Error('QR vacío o demasiado largo.');
- const s=d.students.find(s=>s.id===id); if(!s) throw Error('Elige un alumno.');
- if(d.students.some(s=>s.id!==id&&s.qr===qr)) throw Error('Este QR ya está asociado a otro alumno.');
+ const s=d.students.find(s=>s.id===id); if(!s) throw Error('Elige un nombre de la lista.');
+ if(d.students.some(s=>s.id!==id&&s.qr===qr)) throw Error('Este QR ya está vinculado a otra persona de la lista.');
  s.qr=qr;
 }
 export function mark(d,sessionId,studentId,status='presente',source='manual',now=new Date().toISOString()){
- const s=d.sessions.find(s=>s.id===sessionId); if(!s||!s.roster.some(r=>r.id===studentId)) throw Error('Alumno fuera de esta sesión.');
+ const s=d.sessions.find(s=>s.id===sessionId); if(!s||!s.roster.some(r=>r.id===studentId)) throw Error('Ese nombre no está en la lista de hoy.');
  if(s.closed)throw Error('La asistencia ya está finalizada. Reábrela para corregirla.');
  if(!['presente','ausente','retraso','justificado','pendiente'].includes(status)) throw Error('Estado inválido.');
  const old=s.records[studentId];
@@ -41,13 +41,13 @@ export function mark(d,sessionId,studentId,status='presente',source='manual',now
  s.records[studentId]={status,time:attended(status)?(attended(old?.status)?old.time:now):null,updated:now,source}; return true;
 }
 export function scan(d,sessionId,qr){
- const student=d.students.find(s=>s.qr===qr); if(!student) throw Error('QR sin asociar. Ve a Ajustes → Asociar códigos QR para vincularlo.');
+ const student=d.students.find(s=>s.qr===qr); if(!student) throw Error('Tarjeta sin vincular. Escanéala para elegir a quién pertenece.');
  const changed=mark(d,sessionId,student.id,'presente','qr');return {student,changed};
 }
 export function newSession(d,groupId,title,date){
  if(!d.groups.some(g=>g.id===groupId))throw Error('Crea o elige un grupo.');
  const roster=d.students.filter(s=>s.groupId===groupId).map(({id,name,code})=>({id,name,code}));
- if(!roster.length)throw Error('Añade alumnos antes de crear la sesión.');
+ if(!roster.length)throw Error('La lista del grupo está vacía.');
  if(!title.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('Escribe un nombre y una fecha.');
  const s={id:uid(),groupId,title:title.trim(),date,roster,records:{}};d.sessions.push(s);return s;
 }
@@ -71,7 +71,7 @@ export function importRosterCSV(text,groupName=''){
   if(!name)throw Error(`Fila ${i+2}: falta el nombre.`);
   if(name.length>300)throw Error(`Fila ${i+2}: el nombre supera 300 caracteres.`);
   const key=name.normalize('NFC').toLocaleLowerCase('es');
-  if(seen.has(key))throw Error(`Fila ${i+2}: el nombre se repite. Completa los apellidos para distinguir a cada alumno.`);
+  if(seen.has(key))throw Error(`Fila ${i+2}: el nombre se repite. Completa los apellidos para distinguir cada nombre.`);
   seen.add(key);d.students.push({id:uid(),groupId:g.id,name,code:'',qr:''});
  }
  return validate(d);
@@ -130,8 +130,8 @@ export function exportDailyCSV(d,groupId){
  const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';return '\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n');
 }
 export function linkAndScan(d,sessionId,studentId,qr,preferredName){
- const s=d.sessions.find(s=>s.id===sessionId);if(!s||s.closed||!s.roster.some(r=>r.id===studentId))throw Error('El alumno no pertenece a una asistencia abierta.');
- const student=d.students.find(s=>s.id===studentId);if(student.qr&&student.qr!==qr)throw Error('Este alumno ya tiene otro QR. Corrígelo desde Archivo.');
+ const s=d.sessions.find(s=>s.id===sessionId);if(!s||s.closed||!s.roster.some(r=>r.id===studentId))throw Error('Ese nombre no pertenece a una asistencia abierta.');
+ const student=d.students.find(s=>s.id===studentId);if(student.qr&&student.qr!==qr)throw Error('Esa persona ya tiene otra tarjeta. Cámbiala desde su nombre en la lista.');
  if(preferredName!==undefined&&!validPreferredName(preferredName))throw Error('Escribe un nombre de entre 1 y 300 caracteres.');
  bindQR(d,studentId,qr);const result=scan(d,sessionId,qr);
  if(preferredName!==undefined)student.preferredName=preferredName.trim();

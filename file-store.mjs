@@ -17,8 +17,8 @@ export function createFileBytes(data,XLSX=globalThis.XLSX){
  append('Información',[
  ['Asistencia','Archivo completo'],
  ['Actualizado',new Date().toISOString()],
- ['Contenido','Todos los grupos, historial, alumnos, códigos QR y horas.'],
- ['Recuperar','Abre este archivo desde Archivo → Abrir otro archivo.'],
+ ['Contenido','Todos los grupos, historial, lista de nombres, códigos QR y horas.'],
+ ['Recuperar','Abre la app y carga este archivo con Agregar grupo.'],
  ['Uso','Consulta Registro y Detalle. Corrige los datos dentro de la app.'],
  ['Guardar','En Archivos, usa el mismo nombre y confirma Reemplazar.'],
  ['Copia','Conserva una copia adicional antes de reemplazar si la necesitas.'],
@@ -33,7 +33,7 @@ export function createFileBytes(data,XLSX=globalThis.XLSX){
 }
 export function restoreFileBytes(bytes,XLSX=globalThis.XLSX){
  library(XLSX);let book;try{book=XLSX.read(bytes,{type:'array',cellFormula:true,sheetRows:50001});}catch{throw Error('No se pudo leer el archivo Excel. Elige un Asistencia.xlsx generado por esta app.');}
- const sheet=book.Sheets.Datos_app;if(!sheet||sheet.A1?.v!=='ASISTENCIA_ARCHIVO_V1')throw Error('Este Excel no contiene un respaldo de la app. Para crear un grupo nuevo, usa Cargar lista CSV.');
+ const sheet=book.Sheets.Datos_app;if(!sheet||sheet.A1?.v!=='ASISTENCIA_ARCHIVO_V1')throw Error('Este Excel no contiene un respaldo de la app. Para crear un grupo nuevo, carga una lista CSV.');
  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:''});let data,payload;try{payload=JSON.parse(rows.slice(1).map(r=>{if(typeof r[0]!=='string')throw Error();return r[0];}).join(''));data=validate(payload.data);if(!payload.tables||!Array.isArray(payload.tables.Registro)||!Array.isArray(payload.tables.Detalle))throw Error();}catch{throw Error('Los datos de recuperación del archivo están incompletos o dañados.');}
  for(const [name,expected] of Object.entries(payload.tables)){
  const actual=book.Sheets[name];if(!actual)throw Error(`Falta la hoja ${name}. Usa el archivo original guardado por la app.`);
