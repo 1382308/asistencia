@@ -22,7 +22,9 @@ En **Grupos**, cada tarjeta muestra cómo va la lista de hoy, con un punto por p
 
 La primera vez que aparezca una tarjeta QR, elige a quién pertenece y escribe cómo le llamas. La app guarda esa relación y después la reconoce automáticamente. Si la cámara no lee una tarjeta, usa el botón de teclado del escáner para escribir el código.
 
-En la lista del día puedes marcar **Presente**, **Retraso** o **Falta** con un toque y filtrar por estado (**Sin registrar**, **Faltas**…). Toca un nombre para justificar, quitar la marca o corregir su nombre o tarjeta QR.
+En la lista del día, los círculos llevan el número de lista en su orden, y las faltas quedan marcadas con una × en su lugar. Puedes marcar **Presente**, **Retraso** o **Falta** con un toque y filtrar por estado (**Sin registrar**, **Faltas**…). Toca un nombre o un número para justificar, quitar la marca o corregir su nombre o tarjeta QR.
+
+Si alguien se da de baja, ábrelo y toca **Dar de baja**. Desde ese día deja de aparecer en la lista, no recibe faltas y su tarjeta ya no registra asistencia; conserva su número y su historial. Para revertirlo, abre el filtro **Bajas** y toca **Quitar la baja**.
 
 Al terminar, toca **Finalizar**. Quien siga sin registro queda con falta; la app lo confirma antes y puedes corregirlo después.
 

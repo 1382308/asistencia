@@ -87,7 +87,7 @@
       <div class="summary">
         <p id="summaryText" class="summary-line"></p>
         <p id="summaryNote" class="summary-note"></p>
-        <div id="seatMap" class="seats seats-lg" aria-hidden="true"></div>
+        <div id="seatMap" class="seat-grid" role="group" aria-label="Lista por número"></div>
       </div>
 
       <div id="saveBanner" class="save-banner" hidden>
@@ -97,7 +97,7 @@
 
       <div id="filters" class="chips" role="group" aria-label="Filtrar la lista"></div>
       <ul id="attendanceList" class="roll" aria-label="Lista del día"></ul>
-      <p class="hint">Toca un nombre para justificar una falta o corregir su nombre o tarjeta.</p>
+      <p class="hint">Toca un número o un nombre para justificar, corregir la tarjeta o dar de baja.</p>
     </div>
 
     <footer class="dock">
@@ -234,9 +234,12 @@
 <dialog id="personDialog" class="sheet" aria-labelledby="personName">
   <div class="sheet-inner">
     <div class="sheet-head">
-      <div>
-        <h2 id="personName" class="sheet-title"></h2>
-        <p id="personFull" class="sheet-sub"></p>
+      <div class="person-head">
+        <span id="personSeat" class="seat-num"></span>
+        <div>
+          <h2 id="personName" class="sheet-title"></h2>
+          <p id="personFull" class="sheet-sub"></p>
+        </div>
       </div>
       <button type="button" id="closePerson" class="sheet-close" aria-label="Cerrar">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
@@ -247,11 +250,13 @@
       <p id="personCard" class="person-info muted"></p>
       <div id="personStatuses" class="status-grid"></div>
       <div class="actions">
+        <button type="button" id="reactivatePerson" class="btn btn-primary btn-lg" hidden>Quitar la baja</button>
         <button type="button" id="clearStatus" class="btn btn-secondary btn-lg">Quitar marca</button>
         <button type="button" id="editPerson" class="btn btn-ghost btn-lg">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></svg>
           Editar nombre o tarjeta
         </button>
+        <button type="button" id="dropPerson" class="btn btn-ghost btn-ghost-danger btn-lg">Dar de baja</button>
       </div>
     </div>
   </div>
@@ -418,7 +423,9 @@
       <h3>Crear un grupo</h3>
       <p>Descarga la plantilla CSV, escribe un nombre por fila en la columna nombre y cárgala. Para un grupo que ya usabas, carga su Excel más reciente.</p>
       <h3>Pasar lista</h3>
-      <p>Toca Escanear y apunta la cámara a cada tarjeta. La primera vez que aparezca una tarjeta, elige a quién pertenece y cómo le llamas. También puedes marcar a mano desde la lista del grupo.</p>
+      <p>Toca Escanear y apunta la cámara a cada tarjeta. La primera vez que aparezca una tarjeta, elige a quién pertenece y cómo le llamas. También puedes marcar a mano desde la lista del grupo. Los círculos llevan el número de lista; toca uno para ver a esa persona.</p>
+      <h3>Bajas</h3>
+      <p>Toca un nombre o un número y elige Dar de baja. Desde ese día deja de aparecer en la lista y no cuenta en la asistencia; su historial se conserva. Para revertirlo, abre el filtro Bajas.</p>
       <h3>Guardar el Excel</h3>
       <p>Al finalizar, guarda el Excel que ofrece la app y reemplaza la copia anterior. Conserva la lista, las tarjetas, los nombres preferidos y el historial. No edites sus hojas fuera de la app: podría impedir su restauración.</p>
       <h3>iDoceo</h3>

@@ -7,7 +7,7 @@ export function sameClassroomData(left,right){
   const groups=new Map(data.groups.map(g=>[g.id,g.name]));
   return {
    groups:data.groups.map(g=>g.name),
-   students:data.students.map(s=>[groups.get(s.groupId),s.name,s.code||'',s.qr||'',s.preferredName||'']),
+   students:data.students.map(s=>[groups.get(s.groupId),s.name,s.code||'',s.qr||'',s.preferredName||'',s.droppedOn||'']),
    sessions:data.sessions.map(s=>[
     groups.get(s.groupId),s.title,s.date,Boolean(s.closed),s.nativeColumn??null,
     s.roster.map(r=>{const record=s.records[r.id];return [r.name,r.code||'',record?.status||'pendiente',record?.time??null,record?.source||''];})
@@ -46,7 +46,7 @@ export function scan(d,sessionId,qr){
 }
 export function newSession(d,groupId,title,date){
  if(!d.groups.some(g=>g.id===groupId))throw Error('Crea o elige un grupo.');
- const roster=d.students.filter(s=>s.groupId===groupId).map(({id,name,code})=>({id,name,code}));
+ const roster=d.students.filter(s=>s.groupId===groupId&&!(s.droppedOn&&s.droppedOn<=date)).map(({id,name,code})=>({id,name,code}));
  if(!roster.length)throw Error('La lista del grupo está vacía.');
  if(!title.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('Escribe un nombre y una fecha.');
  const s={id:uid(),groupId,title:title.trim(),date,roster,records:{}};d.sessions.push(s);return s;
@@ -83,8 +83,8 @@ export function validate(d){
  const ids=new Set(); for(const a of [d.groups,d.students,d.sessions])for(const x of a){if(!x||!id(x.id)||ids.has(x.id))fail();ids.add(x.id);}
  for(const g of d.groups)if(!str(g.name)||!g.name.trim())fail();
  const groupIds=new Set(d.groups.map(g=>g.id)),studentIds=new Set(d.students.map(s=>s.id)),qrs=new Set();
- for(const s of d.students){if(!groupIds.has(s.groupId)||!str(s.name)||!s.name.trim()||!str(s.code,200)||!str(s.qr,2048)||s.qr&&qrs.has(s.qr)||s.preferredName!==undefined&&!validPreferredName(s.preferredName))fail();if(s.qr)qrs.add(s.qr);}
- const date=s=>typeof s==='string'&&Number.isFinite(Date.parse(s));
+ const date=s=>typeof s==='string'&&Number.isFinite(Date.parse(s)),day=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&date(s);
+ for(const s of d.students){if(!groupIds.has(s.groupId)||!str(s.name)||!s.name.trim()||!str(s.code,200)||!str(s.qr,2048)||s.qr&&qrs.has(s.qr)||s.preferredName!==undefined&&!validPreferredName(s.preferredName)||s.droppedOn!==undefined&&!day(s.droppedOn))fail();if(s.qr)qrs.add(s.qr);}
  for(const s of d.sessions){if(!groupIds.has(s.groupId)||!str(s.title)||!s.title.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||!date(s.date)||!Array.isArray(s.roster)||!s.records||typeof s.records!=='object'||Array.isArray(s.records))fail();const seen=new Set();if(s.closed!==undefined&&typeof s.closed!=='boolean')fail();if(s.finalizedAt!==undefined&&!date(s.finalizedAt))fail();if(s.closed&&!s.finalizedAt)fail();
  for(const r of s.roster){if(!r||!studentIds.has(r.id)||seen.has(r.id)||!str(r.name)||!str(r.code,200))fail();seen.add(r.id);}
  for(const [k,r]of Object.entries(s.records))if(!seen.has(k)||!r||!['presente','ausente','retraso','justificado','pendiente'].includes(r.status)||!['qr','manual'].includes(r.source)||!date(r.updated)||(attended(r.status)?r.time!==null&&!date(r.time):r.time!==null))fail();
@@ -109,6 +109,28 @@ export function finishDaily(d,id,now=new Date().toISOString()){
  s.closed=true;s.finalizedAt=now;return s;
 }
 export function reopenDaily(d,id){const s=d.sessions.find(s=>s.id===id);if(!s)throw Error('No existe el registro.');s.closed=false;return s;}
+// Una baja deja de contar desde su fecha: sale de las listas de ese día en adelante y conserva su historial anterior.
+export function dropStudent(d,studentId,date=localDate()){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('Fecha inválida.');
+ const student=d.students.find(s=>s.id===studentId);if(!student)throw Error('Ese nombre ya no está en la lista.');
+ if(student.droppedOn)return student;
+ student.droppedOn=date;
+ for(const s of d.sessions)if(s.groupId===student.groupId&&s.date>=date&&s.roster.some(r=>r.id===studentId)){s.roster=s.roster.filter(r=>r.id!==studentId);delete s.records[studentId];}
+ return student;
+}
+// Reactivar devuelve a la persona a la lista de hoy, en su lugar según el orden del grupo.
+export function restoreStudent(d,studentId,date=localDate()){
+ const student=d.students.find(s=>s.id===studentId);if(!student)throw Error('Ese nombre ya no está en la lista.');
+ if(!student.droppedOn)return student;
+ delete student.droppedOn;
+ const s=dailySession(d,student.groupId,date);
+ if(s&&!s.roster.some(r=>r.id===studentId)){
+  const order=d.students.filter(x=>x.groupId===student.groupId).map(x=>x.id);
+  s.roster.push({id:student.id,name:student.name,code:student.code});
+  s.roster.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+ }
+ return student;
+}
 export function groupFromFilename(name){
  if(!/\.xlsx$/i.test(name))return '';
  const stem=name.replace(/\.xlsx$/i,'').replace(/^idoceo[ _-]+/i,'').trim();

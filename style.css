@@ -33,12 +33,14 @@
   --accent-soft: #e8eafe;
 
   /* Estados: mismos colores que ya usaba la app (✔️ verde, ⌛️ ámbar, ❌ rojo) */
-  --ok: #1e8e4e;        --ok-soft: #def3e6;       --ok-ink: #146c3a;
+  --ok: #1b8247;        --ok-soft: #def3e6;       --ok-ink: #146c3a;
   --late: #c47f0e;      --late-soft: #fcefd6;     --late-ink: #8a5a06;
   --absent: #d63447;    --absent-soft: #fbe3e6;   --absent-ink: #a82334;
   --excused: #0e8274;   --excused-soft: #d9f2ee;  --excused-ink: #0a6157;
   --pending: #a3aac2;
   --mark-idle: #6b7290;
+  --seat-ring: #c4c9d9;
+  --late-fill: #f0ad2e;  --late-on: #3a2600;
 
   --warn-bg: #fdf0d8;   --warn-ink: #7a4f05;
 
@@ -69,6 +71,8 @@
     --excused-soft: #10352f; --excused-ink: #78e0d1;
     --pending: #5a6382;
     --mark-idle: #9199b8;
+    --seat-ring: #4a5373;
+    --late-fill: #e8a52f;
     --warn-bg: #3a2c10;     --warn-ink: #f6c66a;
     --shadow: none;
   }
@@ -91,6 +95,8 @@
   --excused-soft: #10352f; --excused-ink: #78e0d1;
   --pending: #5a6382;
   --mark-idle: #9199b8;
+  --seat-ring: #4a5373;
+  --late-fill: #e8a52f;
   --warn-bg: #3a2c10;     --warn-ink: #f6c66a;
   --shadow: none;
 }
@@ -138,6 +144,7 @@ button:disabled { cursor: default; opacity: .45; }
 .btn-secondary:active { background: var(--line); }
 .btn-ghost { background: transparent; color: var(--accent); }
 .btn-ghost:active { background: var(--surface-2); }
+.btn-ghost-danger { color: var(--absent-ink); }
 .btn-danger { background: var(--absent); color: #fff; }
 .btn-warn { background: var(--surface); color: var(--warn-ink); }
 .btn-glass { background: rgb(255 255 255 / 14%); color: #fff; }
@@ -278,6 +285,26 @@ button:disabled { cursor: default; opacity: .45; }
 .seats-sm .seat { width: 10px; height: 10px; box-shadow: inset 0 0 0 1.5px var(--c); }
 .empty-art .seat { width: 18px; height: 18px; }
 
+/* Lista por número: 10 por fila, en orden de lista. Tocar un número abre a esa persona. */
+.seat-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 40px)); gap: 6px; margin-top: 18px; }
+.seat-num {
+  --gap-color: var(--bg);
+  position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px var(--seat-ring);
+  color: var(--muted); font-size: clamp(11px, 3.3vw, 14px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
+}
+button.seat-num:active { transform: scale(.92); }
+.seat-num.is-presente { background: var(--ok); color: #fff; box-shadow: none; }
+.seat-num.is-retraso { background: var(--late-fill); color: var(--late-on); box-shadow: none; }
+.seat-num.is-justificado { background: var(--excused-soft); color: var(--excused-ink); box-shadow: inset 0 0 0 2px var(--excused); }
+.seat-num.is-ausente { background: var(--absent-soft); color: var(--absent-ink); box-shadow: inset 0 0 0 2px var(--absent); }
+.seat-num.is-ausente::after {
+  content: ""; position: absolute; top: -2px; right: -2px; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--absent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 7l10 10M17 7L7 17' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E") center / 9px no-repeat;
+  box-shadow: 0 0 0 2px var(--gap-color);
+}
+.seat-num.is-baja { box-shadow: none; color: var(--faint); text-decoration: line-through; opacity: .8; }
+
 /* 7. Lista del día -------------------------------------------------------- */
 .summary { margin-top: 22px; }
 .summary-line { font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -316,16 +343,21 @@ button:disabled { cursor: default; opacity: .45; }
 .chip[aria-pressed="true"] .chip-count { color: inherit; opacity: .7; }
 
 .roll {
-  list-style: none; margin: 0; padding: 0 8px 0 16px;
+  list-style: none; margin: 0; padding: 0 8px 0 6px;
   background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow);
 }
 .person { display: flex; align-items: center; gap: 10px; min-height: 66px; border-top: 1px solid var(--line); }
 .person:first-child { border-top: 0; }
 .person-main {
   flex: 1; min-width: 0; align-self: stretch;
-  display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px;
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 8px; align-content: center; align-items: baseline;
   margin: 0; padding: 10px 0; border: 0; background: none; text-align: left;
 }
+.person-num { text-align: right; font-size: 14px; font-weight: 700; color: var(--faint); font-variant-numeric: tabular-nums; }
+.person-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.person.is-baja { min-height: 58px; }
+.person.is-baja .person-name { color: var(--muted); }
+.person-tag.is-baja { color: var(--muted); }
 .person-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
 .person-name { font-size: 17px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
 .person-meta { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: 14px; color: var(--muted); line-height: 1.35; }
@@ -431,6 +463,9 @@ dialog::backdrop { background: rgb(10 13 28 / 48%); }
 .confirm { padding-top: 26px; }
 .confirm-text { margin-top: 8px; color: var(--muted); }
 
+.person-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.person-head .seat-num { --gap-color: var(--surface); width: 46px; flex: none; font-size: 17px; }
+.person-head .seat-num.is-baja { box-shadow: inset 0 0 0 2px var(--line); }
 .person-info { font-size: 16px; }
 .person-info + .person-info { margin-top: 2px; font-size: 15px; }
 .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
@@ -549,6 +584,8 @@ tbody th {
 thead th:first-child { left: 0; z-index: 3; padding-left: 22px; text-align: left; }
 th.is-today { color: var(--accent); }
 td.is-today { background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); }
+.history-num { display: inline-block; min-width: 24px; margin-right: 4px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.history-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 700; vertical-align: 1px; }
 .total-col { font-weight: 800; font-variant-numeric: tabular-nums; padding-right: 22px; }
 td.total-col { color: var(--faint); font-weight: 600; }
 td.has-absences { color: var(--absent-ink); font-weight: 800; }

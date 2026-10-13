@@ -5,7 +5,7 @@ import * as core from './core.mjs';
 import {createFileBytes,restoreFileBytes} from './file-store.mjs';
 
 const XLSX=createRequire(import.meta.url)('./vendor/xlsx.mini.min.js');
-const {empty,startDaily,finishDaily,exportDailyCSV,exportCSV,groupFromFilename,importRosterCSV,linkAndScan,parseCSV,rosterBackupFilename,sameClassroomData,scan,validate,selectFile}=core;
+const {empty,startDaily,finishDaily,exportDailyCSV,exportCSV,groupFromFilename,importRosterCSV,linkAndScan,mark,parseCSV,rosterBackupFilename,sameClassroomData,scan,validate,selectFile,dropStudent,restoreStudent}=core;
 function classroom(){
  const d=empty();
  d.groups.push({id:'group-1',name:'Grupo I'});
@@ -124,4 +124,43 @@ test('detecta cambios de QR o nombre preferido aunque el historial sea idéntico
  assert.equal(sameClassroomData(d,staleName),false);
  const staleAttendance=structuredClone(d);staleAttendance.sessions[0].records['student-1'].status='ausente';
  assert.equal(sameClassroomData(d,staleAttendance),false);
+});
+
+test('una baja sale de la lista de hoy, no recibe falta y conserva su historial',()=>{
+ const d=importRosterCSV('nombre\nAna López\nLuis Ruiz\nSofía Garza\n','3A');
+ const [ana,luis,sofia]=d.students,group=d.groups[0].id;
+ const ayer=startDaily(d,group,'2026-10-12').session;
+ mark(d,ayer.id,luis.id,'presente','manual','2026-10-12T14:00:00.000Z');finishDaily(d,ayer.id,'2026-10-12T15:00:00.000Z');
+ const hoy=startDaily(d,group,'2026-10-13').session;
+ mark(d,hoy.id,luis.id,'retraso','manual','2026-10-13T14:10:00.000Z');
+ dropStudent(d,luis.id,'2026-10-13');
+ assert.equal(luis.droppedOn,'2026-10-13');
+ assert.deepEqual(hoy.roster.map(r=>r.id),[ana.id,sofia.id]);
+ assert.equal(hoy.records[luis.id],undefined);
+ assert.equal(ayer.records[luis.id].status,'presente');
+ finishDaily(d,hoy.id,'2026-10-13T15:00:00.000Z');
+ assert.equal(hoy.records[luis.id],undefined);
+ assert.deepEqual(startDaily(d,group,'2026-10-14').session.roster.map(r=>r.id),[ana.id,sofia.id]);
+ const restored=restoreFileBytes(createFileBytes(d,XLSX),XLSX);
+ assert.equal(restored.students[1].droppedOn,'2026-10-13');
+ assert.equal(sameClassroomData(d,restored),true);
+});
+
+test('reactivar devuelve a la persona a la lista de hoy en su lugar',()=>{
+ const d=importRosterCSV('nombre\nAna López\nLuis Ruiz\nSofía Garza\n','3A');
+ const [ana,luis,sofia]=d.students;
+ dropStudent(d,luis.id,'2026-10-13');
+ const hoy=startDaily(d,d.groups[0].id,'2026-10-13').session;
+ assert.deepEqual(hoy.roster.map(r=>r.id),[ana.id,sofia.id]);
+ restoreStudent(d,luis.id,'2026-10-13');
+ assert.equal(luis.droppedOn,undefined);
+ assert.deepEqual(hoy.roster.map(r=>r.id),[ana.id,luis.id,sofia.id]);
+ assert.doesNotThrow(()=>validate(d));
+});
+
+test('valida la fecha de baja y la considera al comparar respaldos',()=>{
+ const d=importRosterCSV('nombre\nAna López\n','3A');
+ const dropped=structuredClone(d);dropStudent(dropped,dropped.students[0].id,'2026-10-13');
+ assert.equal(sameClassroomData(d,dropped),false);
+ for(const bad of ['13/10/2026','',5,'2026-13-45']){const x=structuredClone(d);x.students[0].droppedOn=bad;assert.throws(()=>validate(x));}
 });
