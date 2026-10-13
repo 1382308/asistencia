@@ -1,6 +1,6 @@
 import {readIdoceo,writeIdoceo,idoceoRows} from './idoceo.mjs';
 import {createFileBytes,restoreFileBytes,FILE_NAME,FILE_TYPE} from './file-store.mjs';
-import {empty,bindQR,mark,scan,validate,localDate,dailySession,startDaily,finishDaily,reopenDaily,exportDailyCSV,parseCSV,importRosterCSV,rosterBackupFilename,linkAndScan,fileKey,sameClassroomData,recentFiles,selectFile} from './core.mjs';
+import {empty,bindQR,mark,scan,validate,localDate,dailySession,startDaily,finishDaily,reopenDaily,exportDailyCSV,parseCSV,importRosterCSV,rosterBackupFilename,linkAndScan,fileKey,sameClassroomData,recentFiles,selectFile,dropStudent,restoreStudent} from './core.mjs';
 
 const $=id=>document.getElementById(id);
 let db,data=empty(),groupId='',day=localDate(),busy=false,stream=null,generation=0,pendingQR='',pendingStudentId='',lastScan='',lastAt=0,noticeTimer,flashTimer,sharing=false;
@@ -18,9 +18,8 @@ const STATUS={
  justificado:{label:'Justificado',plural:'Justificados',icon:'doc'},
  pendiente:{label:'Sin registrar',plural:'Sin registrar',icon:'dash'}
 };
-const SEAT_ORDER=['presente','retraso','justificado','ausente','pendiente'];
 const QUICK=['presente','retraso','ausente'];
-const FILTERS=['todos','pendiente','ausente','retraso','justificado','presente'];
+const FILTERS=['todos','pendiente','ausente','retraso','justificado','presente','baja'];
 const ICONS={
  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -38,6 +37,7 @@ const capitalize=s=>s.charAt(0).toUpperCase()+s.slice(1);
 const todayLabel=()=>capitalize(new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}));
 const clock=iso=>new Date(iso).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'});
 const plural=(n,one,many)=>`${n} ${n===1?one:many}`;
+const dayLabel=iso=>new Date(`${iso}T12:00:00`).toLocaleDateString('es-MX',{day:'numeric',month:'long'});
 const sentence=text=>/[.!?]$/.test(text)?text:`${text}.`;
 const fold=s=>String(s).normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase('es');
 const pendingBackup=d=>Boolean(d.exportPending||d.exportPending!==false&&d.sessions.length);
@@ -64,17 +64,32 @@ async function change(fn,dirty=true){if(!db)throw Error('Almacenamiento no dispo
 
 // ---------- Datos para mostrar ----------
 function session(){return dailySession(data,groupId,day);}
+// Todas las personas del grupo en orden de lista. El número de lista es su lugar en ese orden,
+// así que no cambia aunque alguien se dé de baja.
 function rosterOf(d,gid,s){
- return (s?s.roster:d.students.filter(x=>x.groupId===gid)).map(r=>{
-  const student=d.students.find(x=>x.id===r.id)||r,record=s?.records[r.id];
-  return {id:r.id,name:student.name||r.name,preferred:student.preferredName||'',qr:student.qr||'',status:record?.status||'pendiente',time:record?.time||null,source:record?.source||''};
+ const today=s?new Set(s.roster.map(r=>r.id)):null;
+ return d.students.filter(x=>x.groupId===gid).map((student,i)=>{
+  const record=s?.records[student.id];
+  return {id:student.id,number:i+1,name:student.name,preferred:student.preferredName||'',qr:student.qr||'',droppedOn:student.droppedOn||'',
+   active:today?today.has(student.id):!student.droppedOn,status:record?.status||'pendiente',time:record?.time||null,source:record?.source||''};
  });
 }
 const people=()=>rosterOf(data,groupId,session());
-function tally(list){const t={todos:list.length,presente:0,retraso:0,ausente:0,justificado:0,pendiente:0};for(const p of list)t[p.status]++;t.llegaron=t.presente+t.retraso;return t;}
-function fillSeats(box,list){box.replaceChildren(...[...list].sort((a,b)=>SEAT_ORDER.indexOf(a.status)-SEAT_ORDER.indexOf(b.status)).map(p=>element('span',undefined,`seat ${p.status}`)));}
+const activeOnly=list=>list.filter(p=>p.active);
+const droppedOnly=list=>list.filter(p=>!p.active&&p.droppedOn);
+function tally(list){const t={todos:0,presente:0,retraso:0,ausente:0,justificado:0,pendiente:0,baja:0};for(const p of list){if(p.active){t.todos++;t[p.status]++;}else if(p.droppedOn)t.baja++;}t.llegaron=t.presente+t.retraso;return t;}
+function fillSeats(box,list){box.replaceChildren(...activeOnly(list).map(p=>element('span',undefined,`seat ${p.status}`)));}
+function renderSeatMap(list){
+ const box=$('seatMap');box.replaceChildren();
+ for(const p of list){
+  if(!p.active&&!p.droppedOn)continue;
+  const state=p.active?p.status:'baja',seat=button(`seat-num is-${state}`,()=>openPerson(p.id),String(p.number));
+  seat.setAttribute('aria-label',`${p.number}. ${p.preferred||p.name}: ${p.active?STATUS[p.status].label:'Baja'}`);
+  box.append(seat);
+ }
+}
 function pendingNames(list){
- const names=list.filter(p=>p.status==='pendiente').map(p=>p.preferred||p.name);
+ const names=activeOnly(list).filter(p=>p.status==='pendiente').map(p=>p.preferred||p.name);
  if(!names.length)return 'Todas las personas tienen registro.';
  return names.length>2?`Sin registrar: ${names.slice(0,2).join(', ')} y ${names.length-2} más`:`Sin registrar: ${names.join(' y ')}`;
 }
@@ -109,7 +124,7 @@ function renderGroup(){
  $('groupTitle').textContent=g.name;$('groupDate').textContent=todayLabel();
  $('summaryText').textContent=`${t.llegaron} de ${t.todos} ${t.llegaron===1?'llegó':'llegaron'}`;
  $('summaryNote').textContent=!s?'La lista de hoy no se ha iniciado.':s.closed?(t.ausente?`Lista finalizada con ${plural(t.ausente,'falta','faltas')}.`:'Lista finalizada sin faltas.'):t.pendiente?`Lista en curso. Quedan ${t.pendiente} sin registrar.`:'Lista en curso. Todas las personas tienen registro.';
- fillSeats($('seatMap'),list);
+ renderSeatMap(list);
  $('saveBanner').hidden=!pending;$('saveBannerButton').disabled=sharing;
  renderFilters(t);renderList(list);
  $('scanLabel').textContent=!s?'Escanear tarjetas':s.closed?'Reabrir y escanear':'Seguir escaneando';
@@ -128,24 +143,27 @@ function renderFilters(t){
   if(key!=='todos'&&!t[key]&&filter!==key)continue;
   const chip=button(`chip chip-${key}`,()=>{const kb=keyboardFocus();filter=key;renderGroup();if(kb)refocus(`chip-${key}`);});
   chip.setAttribute('aria-pressed',String(filter===key));chip.setAttribute('data-focus',`chip-${key}`);
-  chip.append(element('span',key==='todos'?'Todos':STATUS[key].plural),element('span',String(t[key]),'chip-count'));
+  chip.append(element('span',key==='todos'?'Todos':key==='baja'?'Bajas':STATUS[key].plural),element('span',String(t[key]),'chip-count'));
   box.append(chip);
  }
- globalThis.requestAnimationFrame?.(()=>{const chip=box.querySelector?.('[aria-pressed="true"]');if(chip&&chip.offsetLeft+chip.offsetWidth>box.scrollLeft+box.clientWidth)box.scrollLeft=chip.offsetLeft-16;});
+ globalThis.requestAnimationFrame?.(()=>{const chip=box.querySelector?.('[aria-pressed="true"]');if(chip&&(chip.offsetLeft<box.scrollLeft||chip.offsetLeft+chip.offsetWidth>box.scrollLeft+box.clientWidth))box.scrollLeft=chip.offsetLeft-16;});
 }
 function renderList(list){
- const box=$('attendanceList'),shown=filter==='todos'?list:list.filter(p=>p.status===filter);
+ const box=$('attendanceList'),shown=filter==='baja'?droppedOnly(list):filter==='todos'?activeOnly(list):activeOnly(list).filter(p=>p.status===filter);
  box.replaceChildren();
  for(const p of shown){
-  const display=p.preferred||p.name,li=element('li',undefined,`person is-${p.status}`);
-  const main=button('person-main',()=>openPerson(p.id));
+  const display=p.preferred||p.name,li=element('li',undefined,`person is-${p.active?p.status:'baja'}`);
+  const main=button('person-main',()=>openPerson(p.id)),text=element('span',undefined,'person-text');
+  main.append(element('span',String(p.number),'person-num'),text);
   const line=element('span',undefined,'person-line');line.append(element('span',display,'person-name'));
-  if(p.time)line.append(element('span',clock(p.time),'person-time'));
-  main.append(line);
+  if(p.active&&p.time)line.append(element('span',clock(p.time),'person-time'));
+  text.append(line);
   const meta=element('span',undefined,'person-meta');
-  if(p.status==='justificado')meta.append(element('span','Justificado','person-tag'));
+  if(!p.active)meta.append(element('span',`Baja desde el ${dayLabel(p.droppedOn)}`,'person-tag is-baja'));
+  else if(p.status==='justificado')meta.append(element('span','Justificado','person-tag'));
   if(p.preferred&&p.preferred!==p.name)meta.append(element('span',p.name,'person-full'));
-  if(meta.children.length)main.append(meta);
+  if(meta.children.length)text.append(meta);
+  if(!p.active){li.append(main);box.append(li);continue;}
   const marks=element('div',undefined,'marks');marks.setAttribute('role','group');marks.setAttribute('aria-label',`Asistencia de ${display}`);
   for(const key of QUICK){
    const on=p.status===key,focusKey=`mark-${p.id}-${key}`;
@@ -210,11 +228,16 @@ function describe(p){
 function renderPerson(){
  const p=people().find(x=>x.id===personId);
  if(!p){if($('personDialog').open)$('personDialog').close();return;}
+ const dropped=!p.active&&Boolean(p.droppedOn);
+ $('personSeat').textContent=String(p.number);$('personSeat').className=`seat-num is-${dropped?'baja':p.status}`;
  $('personName').textContent=p.preferred||p.name;
  $('personFull').textContent=p.preferred&&p.preferred!==p.name?p.name:'';
- $('personInfo').textContent=describe(p);
+ $('personInfo').textContent=dropped?`Baja desde el ${dayLabel(p.droppedOn)}. Ya no aparece en la lista ni cuenta en la asistencia.`:describe(p);
  $('personCard').textContent=p.qr?'Tiene una tarjeta QR vinculada.':'Todavía no tiene tarjeta QR vinculada.';
+ $('personStatuses').hidden=dropped;$('dropPerson').hidden=dropped;$('reactivatePerson').hidden=!dropped;
+ $('dropPerson').disabled=$('reactivatePerson').disabled=sharing;
  const box=$('personStatuses');box.replaceChildren();
+ if(dropped){$('clearStatus').hidden=true;return;}
  for(const key of ['presente','retraso','ausente','justificado']){
   const b=button(`status-btn status-${key}`,safe(async()=>{$('personDialog').close();await setStatus(p.id,key);}));
   b.innerHTML=svg(STATUS[key].icon);b.append(element('span',STATUS[key].label));
@@ -224,6 +247,22 @@ function renderPerson(){
 }
 $('clearStatus').onclick=safe(async()=>{const id=personId;$('personDialog').close();await setStatus(id,'pendiente');});
 $('editPerson').onclick=()=>openEdit(personId);
+$('dropPerson').onclick=safe(async()=>{
+ const p=people().find(x=>x.id===personId);if(!p)return;const display=p.preferred||p.name;
+ $('personDialog').close();
+ if(!await ask({title:`¿Dar de baja a ${display}?`,message:'Desde hoy dejará de aparecer en la lista y no contará en la asistencia. Su historial se conserva y puedes revertirlo desde el filtro Bajas.',ok:'Dar de baja',cancel:'Cancelar',danger:true}))return;
+ if(day!==localDate()){refreshDay();throw Error('Cambió el día. Abre la lista de hoy.');}
+ await change(d=>dropStudent(d,p.id,day));
+ notice(`Baja registrada: ${display}.`);
+});
+$('reactivatePerson').onclick=safe(async()=>{
+ const p=people().find(x=>x.id===personId);if(!p)return;const display=p.preferred||p.name;
+ if(day!==localDate()){refreshDay();throw Error('Cambió el día. Abre la lista de hoy.');}
+ $('personDialog').close();
+ await change(d=>restoreStudent(d,p.id,day));
+ if(filter==='baja'&&!tally(people()).baja){filter='todos';renderGroup();}
+ notice(`${display} volvió a la lista.`);
+});
 function openEdit(id){
  const student=data.students.find(s=>s.id===id);if(!student)return;
  editingId=id;$('editName').value=student.name;$('editPreferred').value=student.preferredName||'';$('editQR').value=student.qr||'';$('editError').textContent='';
@@ -240,7 +279,7 @@ $('editForm').onsubmit=safe(async e=>{
 $('clearQR').onclick=()=>{$('editQR').value='';};
 
 // ---------- Historial ----------
-function cellStatus(value){const text=String(value??'').trim().replace(/️/g,'');if(!text)return '';return {'✔':'presente','✅':'presente','❌':'ausente','⌛':'retraso','⏳':'retraso',justificado:'justificado',Justificado:'justificado',pendiente:'pendiente'}[text]||null;}
+function cellStatus(value){const text=String(value??'').trim().replace(/\uFE0F/g,'');if(!text)return '';return {'✔':'presente','✅':'presente','❌':'ausente','⌛':'retraso','⏳':'retraso',justificado:'justificado',Justificado:'justificado',pendiente:'pendiente'}[text]||null;}
 function shortDate(text){const m=text.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);return m?`${m[3]}/${m[2]}${m[4]}`:text;}
 function renderHistory(){
  const g=data.groups.find(x=>x.id===groupId),hasSessions=data.sessions.some(s=>s.groupId===groupId);
@@ -256,8 +295,13 @@ function renderHistory(){
  dateCols.forEach((j,i)=>{const th=element('th',shortDate(String(rows[0][j]).trim()),isToday[i]?'is-today':undefined);th.setAttribute('scope','col');head.append(th);});
  const totalHead=element('th','Faltas','total-col');totalHead.setAttribute('scope','col');head.append(totalHead);
  thead.append(head);
- for(const row of rows.slice(1)){
-  const tr=element('tr'),name=element('th',String(row[nameCol]??''));name.setAttribute('scope','row');tr.append(name);let absences=0;
+ const members=data.students.filter(s=>s.groupId===groupId),numbered=members.length===rows.length-1;
+ rows.slice(1).forEach((row,r)=>{
+  const tr=element('tr'),name=element('th',undefined,'history-name'),member=numbered?members[r]:null;name.setAttribute('scope','row');
+  if(member)name.append(element('span',String(r+1),'history-num'));
+  name.append(element('span',String(row[nameCol]??'')));
+  if(member?.droppedOn)name.append(element('span','Baja','history-tag'));
+  tr.append(name);let absences=0;
   dateCols.forEach((j,i)=>{
    const status=cellStatus(row[j]),td=element('td',undefined,isToday[i]?'is-today':undefined);
    if(status===null)td.textContent=String(row[j]).trim();
@@ -265,7 +309,7 @@ function renderHistory(){
    tr.append(td);
   });
   tr.append(element('td',String(absences),absences?'total-col has-absences':'total-col'));tbody.append(tr);
- }
+ });
  table.append(thead,tbody);box.append(table);
 }
 
@@ -351,7 +395,7 @@ $('fileInput').onchange=safe(async()=>{const f=$('fileInput').files[0];if(!f)ret
 }finally{$('fileInput').value='';}});
 
 function download(content,name,type){const url=URL.createObjectURL(new Blob([content],{type})),a=element('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-const downloadTemplate=()=>download('﻿nombre\r\n','plantilla-lista.csv','text/csv;charset=utf-8');
+const downloadTemplate=()=>download('\uFEFFnombre\r\n','plantilla-lista.csv','text/csv;charset=utf-8');
 
 // ---------- Guardar el Excel ----------
 async function saveFile(){
@@ -399,7 +443,7 @@ async function startCamera(){
  }catch(e){if(current!==generation)return;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;cameraMessage('Permite el acceso a la cámara o marca la asistencia en la lista.');$('retryCamera').hidden=false;}
 }
 async function tick(current){if(!stream||current!==generation)return;try{const v=$('video');if(!pendingQR&&!$('manualDialog').open&&!$('confirmDialog').open&&v.readyState>=2&&v.videoWidth){const scale=Math.min(1,900/v.videoWidth);canvas.width=Math.round(v.videoWidth*scale);canvas.height=Math.round(v.videoHeight*scale);ctx.drawImage(v,0,0,canvas.width,canvas.height);const frame=ctx.getImageData(0,0,canvas.width,canvas.height),qr=window.jsQR(frame.data,frame.width,frame.height,{inversionAttempts:'attemptBoth'});if(qr&&(qr.data!==lastScan||Date.now()-lastAt>3000)){lastScan=qr.data;lastAt=Date.now();await acceptQR(qr.data);}}}catch(e){cameraMessage(e.message,true);}if(stream&&current===generation)setTimeout(()=>tick(current),170);}
-async function acceptQR(qr){if(day!==localDate()){refreshDay();throw Error('Cambió el día.');}const s=session();if(!s||s.closed)throw Error('Abre la asistencia para registrar.');if(typeof qr!=='string'||!qr.length||qr.length>2048)throw Error('QR vacío o demasiado largo.');const student=data.students.find(s=>s.qr===qr);if(!student){showLink(qr);return;}if(!s.roster.some(r=>r.id===student.id))throw Error('Esa tarjeta no está en la lista de hoy.');if(!student.preferredName){showName(student,qr);return;}confirmScan(await change(d=>scan(d,s.id,qr)));}
+async function acceptQR(qr){if(day!==localDate()){refreshDay();throw Error('Cambió el día.');}const s=session();if(!s||s.closed)throw Error('Abre la asistencia para registrar.');if(typeof qr!=='string'||!qr.length||qr.length>2048)throw Error('QR vacío o demasiado largo.');const student=data.students.find(s=>s.qr===qr);if(!student){showLink(qr);return;}if(!s.roster.some(r=>r.id===student.id))throw Error(student.droppedOn?`Esta tarjeta es de ${student.preferredName||student.name}, con baja desde el ${dayLabel(student.droppedOn)}.`:'Esa tarjeta no está en la lista de hoy.');if(!student.preferredName){showName(student,qr);return;}confirmScan(await change(d=>scan(d,s.id,qr)));}
 function confirmScan(result){
  const name=result.student.preferredName||result.student.name,label=result.changed?'Asistencia registrada':'Ya tenía asistencia hoy';
  const check=element('span',undefined,'scan-check'),details=element('div',undefined,'scan-details');check.innerHTML=svg('check');check.setAttribute('aria-hidden','true');

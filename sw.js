@@ -1,4 +1,4 @@
-const CACHE='aula-static-v18';
+const CACHE='aula-static-v19';
 const ASSETS=['./','./index.html','./style.css','./app.mjs','./core.mjs','./file-store.mjs','./idoceo.mjs','./vendor/xlsx.mini.min.js','./vendor/jsQR.js','./vendor/atkinson-hyperlegible-next-latin.woff2','./manifest.webmanifest','./icon.svg','./icon.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 // Borra las versiones anteriores de la caché al activar la nueva.
