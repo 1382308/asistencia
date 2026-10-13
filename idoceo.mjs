@@ -16,7 +16,7 @@ export function idoceoRows(data){
  for(const student of data.students)if(info.rowMap[student.id])rows[info.rowMap[student.id]-1][0]=student.name;
  let next=rows[0].length;
  for(const s of data.sessions.filter(s=>s.groupId===info.groupId)){const col=s.nativeColumn??next++;rows[0][col]=s.date.slice(8)+'/'+s.date.slice(5,7);for(const [id,r] of Object.entries(info.rowMap))rows[r-1][col]=({presente:'✔️',ausente:'❌',retraso:'⌛️',justificado:'Justificado',pendiente:''})[s.records[id]?.status]||'';}
- return [['','Alumno','',...rows[0].slice(1).map(x=>String(x).trim())],...Object.values(info.rowMap).map(r=>['',rows[r-1][0],'',...rows[r-1].slice(1)])];
+ return [['','Nombre','',...rows[0].slice(1).map(x=>String(x).trim())],...Object.values(info.rowMap).map(r=>['',rows[r-1][0],'',...rows[r-1].slice(1)])];
 }
 function textCell(doc,ref,value,style){const c=doc.createElementNS(NS,'c');c.setAttribute('r',ref);c.setAttribute('t','inlineStr');if(style)c.setAttribute('s',style);const is=doc.createElementNS(NS,'is'),t=doc.createElementNS(NS,'t');t.setAttribute('xml:space','preserve');t.textContent=value;is.append(t);c.append(is);return c;}
 export function readIdoceo(bytes,filename){
@@ -35,7 +35,7 @@ export function readIdoceo(bytes,filename){
  if(rows[0]?.[0]||!rows[0]?.slice(1).some(v=>/^\s*\d{2}\/\d{2}\s*$/.test(String(v))))throw Error('No se reconoce la columna de asistencia de iDoceo.');
  const d=empty(),g={id:uid(),name};d.groups.push(g);const rowMap={};const names=new Set();
  for(let r=1;r<rows.length;r++){const name=String(rows[r][0]||'').trim();if(!name)continue;if(names.has(name))throw Error('Hay nombres repetidos. Añade un identificador al nombre en iDoceo antes de exportar.');names.add(name);const s={id:uid(),groupId:g.id,name,code:'',qr:''};d.students.push(s);rowMap[s.id]=r+1;}
- if(!d.students.length)throw Error('No hay alumnos en el archivo.');
+ if(!d.students.length)throw Error('No hay nombres en el archivo.');
  const workbook=parse(get(zip,'xl/workbook.xml')),rels=parse(get(zip,'xl/_rels/workbook.xml.rels'));
  const rid=all(workbook,'sheet')[0].getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
  const target=all(rels,'Relationship').find(r=>r.getAttribute('Id')===rid)?.getAttribute('Target');

@@ -21,6 +21,12 @@ async function openApp(t,initial,answer){
  });
  const elements=new Map([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])=>[id,element()]));
  const state={stored:structuredClone(initial),writes:0,confirmations:[]};
+ // The confirmation sheet is the browser boundary: record its message and tap the answer.
+ const confirmDialog=elements.get('confirmDialog');
+ confirmDialog.showModal=function(){
+  this.open=true;state.confirmations.push(elements.get('confirmMessage').textContent);
+  queueMicrotask(()=>elements.get(answer?'confirmOk':'confirmCancel').onclick());
+ };
  const db={transaction(name){
   assert.equal(name,'state');
   const transaction={
@@ -50,7 +56,8 @@ async function openApp(t,initial,answer){
    assert.equal(name,'aula-asistencia');assert.equal(version,1);
    const request={result:db};queueMicrotask(()=>request.onsuccess());return request;
   }},
-  confirm(message){state.confirmations.push(message);return answer;},
+  confirm(){throw Error('La app usa su propia hoja de confirmación.');},
+  prompt(){throw Error('La app usa sus propias hojas para pedir datos.');},
   setInterval(){},setTimeout(){},clearTimeout(){}
  };
  for(const [key,value] of Object.entries(globals)){

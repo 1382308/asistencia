@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Control de asistencia escolar sin conexión mediante escaneo de tarjetas QR">
-  <meta name="theme-color" content="#5260ed">
+  <meta name="theme-color" content="#f2f4fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0c1020" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -18,149 +19,425 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.png">
 
-  <!-- Estilos y precarga de módulo -->
+  <!-- Estilos, tipografía y precarga de módulo -->
+  <link rel="preload" href="vendor/atkinson-hyperlegible-next-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <link rel="modulepreload" href="app.mjs">
 </head>
 <body>
-  <header>
-    <b>Asistencia</b>
-    <button type="button" id="menuButton" class="text-button" aria-haspopup="dialog">Opciones</button>
+<div id="app" class="app view-home">
+
+  <!-- Vista: Grupos -->
+  <section id="homeView" class="view" aria-labelledby="homeTitle">
+    <div class="body">
+      <header class="home-head">
+        <div>
+          <h1 id="homeTitle" class="title">Asistencia</h1>
+          <p id="homeDate" class="date"></p>
+        </div>
+        <button type="button" id="menuButton" class="icon-btn" aria-haspopup="dialog" aria-label="Más opciones">
+          <svg class="icon icon-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>
+        </button>
+      </header>
+
+      <div id="emptyState" class="empty">
+        <div class="empty-art" aria-hidden="true">
+          <span class="seat presente"></span><span class="seat presente"></span><span class="seat presente"></span><span class="seat retraso"></span><span class="seat presente"></span><span class="seat"></span><span class="seat"></span><span class="seat"></span>
+          <span class="seat presente"></span><span class="seat presente"></span><span class="seat"></span><span class="seat"></span><span class="seat"></span><span class="seat"></span><span class="seat"></span><span class="seat"></span>
+        </div>
+        <h2>Crea tu primer grupo</h2>
+        <p>Carga la lista en CSV o restaura el Excel de un grupo. Después, escanea las tarjetas QR para registrar la asistencia del día.</p>
+        <div class="actions">
+          <button type="button" id="openFile" class="btn btn-primary btn-lg">Cargar lista o Excel</button>
+          <button type="button" id="downloadRosterTemplate" class="btn btn-secondary btn-lg">Descargar plantilla CSV</button>
+        </div>
+        <ol class="steps">
+          <li><span>Descarga la plantilla y escribe un nombre por fila en la columna <b>nombre</b>.</span></li>
+          <li><span>Carga el archivo y escribe el nombre del grupo.</span></li>
+          <li><span>Toca <b>Escanear</b> y apunta la cámara a cada tarjeta. La primera vez, elige a quién pertenece cada una.</span></li>
+        </ol>
+      </div>
+
+      <div id="recentGroups" class="groups"></div>
+      <button type="button" id="addGroup" class="add-group" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
+        Agregar grupo
+      </button>
+    </div>
+  </section>
+
+  <!-- Vista: Lista del día de un grupo -->
+  <section id="groupView" class="view" aria-labelledby="groupTitle" hidden>
+    <header class="bar">
+      <button type="button" id="backHome" class="back-btn">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>
+        Grupos
+      </button>
+      <button type="button" id="groupMenuButton" class="icon-btn" aria-haspopup="dialog" aria-label="Opciones del grupo">
+        <svg class="icon icon-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>
+      </button>
+    </header>
+
+    <div class="body">
+      <div class="group-head">
+        <h1 id="groupTitle" class="title"></h1>
+        <p id="groupDate" class="date"></p>
+      </div>
+
+      <div class="summary">
+        <p id="summaryText" class="summary-line"></p>
+        <p id="summaryNote" class="summary-note"></p>
+        <div id="seatMap" class="seats seats-lg" aria-hidden="true"></div>
+      </div>
+
+      <div id="saveBanner" class="save-banner" hidden>
+        <p>El Excel del grupo tiene cambios sin guardar.</p>
+        <button type="button" id="saveBannerButton" class="btn btn-sm btn-warn">Guardar Excel</button>
+      </div>
+
+      <div id="filters" class="chips" role="group" aria-label="Filtrar la lista"></div>
+      <ul id="attendanceList" class="roll" aria-label="Lista del día"></ul>
+      <p class="hint">Toca un nombre para justificar una falta o corregir su nombre o tarjeta.</p>
+    </div>
+
+    <footer class="dock">
+      <div class="dock-inner">
+        <button type="button" id="scanButton" class="btn btn-primary btn-lg">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3M7 12h10"/></svg>
+          <span id="scanLabel">Escanear tarjetas</span>
+        </button>
+        <button type="button" id="finishButton" class="btn btn-secondary btn-lg">Finalizar</button>
+      </div>
+    </footer>
+  </section>
+
+  <p id="message" role="status" aria-live="polite" hidden></p>
+</div>
+
+<!-- Selector de archivo oculto -->
+<input type="file" id="fileInput" accept=".xlsx, .csv" hidden aria-label="Seleccionar lista CSV o Excel">
+
+<!-- Escáner a pantalla completa -->
+<dialog id="scanDialog" class="scanner" aria-labelledby="scanTitle">
+  <video id="video" autoplay muted playsinline aria-label="Vista de la cámara para escanear tarjetas QR"></video>
+  <div class="scan-shade" aria-hidden="true">
+    <div id="viewfinder" class="viewfinder">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false"><path d="M3 24V13A10 10 0 0 1 13 3h11M76 3h11a10 10 0 0 1 10 10v11M97 76v11a10 10 0 0 1-10 10H76M24 97H13A10 10 0 0 1 3 87V76"/></svg>
+    </div>
+  </div>
+  <header class="scan-bar">
+    <button type="button" id="closeScan" class="glass-btn" aria-label="Cerrar escáner">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+    </button>
+    <div class="scan-titles">
+      <h2 id="scanTitle"></h2>
+      <p id="cameraCount"></p>
+    </div>
+    <button type="button" id="manualEntry" class="glass-btn" aria-label="Escribir el código QR">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg>
+    </button>
   </header>
-
-  <main>
-    <p id="message" role="status" aria-live="polite" hidden></p>
-
-    <section id="welcome" class="home">
-      <h1 id="homeTitle">Asistencia</h1>
-      <div id="recentGroups"></div>
-      <button type="button" id="openFile">Cargar lista CSV o restaurar Excel</button>
-      <button type="button" id="downloadRosterTemplate" class="text-button">Descargar plantilla CSV</button>
-      <p id="recentNote" class="muted" hidden>Guarda el Excel actualizado después de cada clase para conservar el grupo.</p>
-
-      <details id="absences" hidden>
-        <summary id="absenceSummary"></summary>
-        <ol id="absentList"></ol>
-      </details>
-
-      <p id="saveStatus" class="muted" role="status"></p>
-    </section>
-  </main>
-
-  <!-- Selector de archivo oculto -->
-  <input type="file" id="fileInput" accept=".xlsx, .csv" hidden aria-label="Seleccionar lista CSV o Excel maestro">
-
-  <!-- Diálogo: Opciones y Configuración -->
-  <dialog id="menuDialog" aria-labelledby="menuTitle">
-    <div class="section-head">
-      <h2 id="menuTitle">Opciones</h2>
-      <button type="button" id="closeMenu" class="text-button">Cerrar</button>
+  <div class="scan-panel">
+    <div class="scan-card">
+      <div id="cameraMessage" role="status" aria-live="polite" aria-atomic="true">Apunta a una tarjeta QR.</div>
+      <div id="scanSeats" class="seats seats-scan" aria-hidden="true"></div>
+      <p id="scanPending" class="scan-pending"></p>
+      <button type="button" id="retryCamera" class="btn btn-glass btn-block" hidden>Activar cámara</button>
+      <div class="scan-actions">
+        <button type="button" id="scanToList" class="btn btn-glass btn-lg">Ver lista</button>
+        <button type="button" id="finishCamera" class="btn btn-primary btn-lg">Finalizar</button>
+      </div>
     </div>
-    <p id="sourceFile" class="muted"></p>
-    <button type="button" id="saveMenu" class="secondary">Guardar Excel</button>
+  </div>
+</dialog>
 
-    <details id="historyPanel">
-      <summary>Historial del grupo abierto</summary>
-      <button type="button" id="exportMatrix" class="text-button">Exportar CSV</button>
-      <div id="historyTable" class="table-scroll"></div>
-    </details>
+<!-- Hoja: Opciones generales -->
+<dialog id="menuDialog" class="sheet" aria-labelledby="menuTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="menuTitle" class="sheet-title">Opciones</h2>
+      <button type="button" id="closeMenu" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="menu">
+        <button type="button" id="menuOpenFile" class="menu-item">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+          <span class="menu-text">Agregar grupo<small>Carga una lista CSV o restaura un Excel</small></span>
+        </button>
+        <button type="button" id="menuTemplate" class="menu-item">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+          <span class="menu-text">Descargar plantilla CSV<small>Una sola columna llamada nombre</small></span>
+        </button>
+        <button type="button" id="helpButton" class="menu-item">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6M12 17h.01"/></svg></span>
+          <span class="menu-text">Ayuda y uso sin conexión</span>
+        </button>
+        <div class="menu-sep"></div>
+        <button type="button" id="logoutButton" class="menu-item danger">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg></span>
+          <span class="menu-text">Cerrar sesión<small>Quita los grupos de este dispositivo</small></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</dialog>
 
-    <details>
-      <summary>Corregir nombres o QR</summary>
-      <div id="studentList"></div>
-    </details>
+<!-- Hoja: Opciones del grupo -->
+<dialog id="groupMenuDialog" class="sheet" aria-labelledby="groupMenuTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="groupMenuTitle" class="sheet-title"></h2>
+        <p id="sourceFile" class="sheet-sub"></p>
+      </div>
+      <button type="button" id="closeGroupMenu" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="menu">
+        <button type="button" id="historyButton" class="menu-item">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>
+          <span class="menu-text">Historial<small>Todas las fechas registradas</small></span>
+        </button>
+        <button type="button" id="saveMenu" class="menu-item">
+          <span class="icon-tile"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/></svg></span>
+          <span class="menu-text"><span id="saveMenuText">Guardar Excel</span><small id="saveMenuNote"></small></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</dialog>
 
-    <details>
-      <summary>Ayuda</summary>
-      <p>Para crear un grupo, descarga la plantilla CSV, agrega una fila por alumno en la columna nombre y cárgala. Escribe el nombre del grupo cuando la app lo pida. Para un grupo existente, carga su último Excel maestro.</p>
-      <p>Al finalizar cada clase, guarda el Excel actualizado y reemplaza la copia anterior. Conserva la lista, los QR, los nombres preferidos y el historial.</p>
-      <p>Si usas iDoceo, también puedes cargar y actualizar su Excel de asistencia.</p>
+<!-- Hoja: Historial -->
+<dialog id="historyDialog" class="sheet sheet-tall" aria-labelledby="historyTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="historyTitle" class="sheet-title">Historial</h2>
+        <p id="historyGroup" class="sheet-sub"></p>
+      </div>
+      <button type="button" id="closeHistory" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content history">
+      <div id="historyTable" class="table-wrap"></div>
+      <button type="button" id="exportMatrix" class="btn btn-secondary btn-block">Exportar CSV</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Hoja: Una persona de la lista -->
+<dialog id="personDialog" class="sheet" aria-labelledby="personName">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="personName" class="sheet-title"></h2>
+        <p id="personFull" class="sheet-sub"></p>
+      </div>
+      <button type="button" id="closePerson" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <p id="personInfo" class="person-info"></p>
+      <p id="personCard" class="person-info muted"></p>
+      <div id="personStatuses" class="status-grid"></div>
+      <div class="actions">
+        <button type="button" id="clearStatus" class="btn btn-secondary btn-lg">Quitar marca</button>
+        <button type="button" id="editPerson" class="btn btn-ghost btn-lg">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></svg>
+          Editar nombre o tarjeta
+        </button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Hoja: Editar nombre o tarjeta -->
+<dialog id="editDialog" class="sheet" aria-labelledby="editTitle">
+  <form id="editForm" class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="editTitle" class="sheet-title">Editar nombre o tarjeta</h2>
+      <button type="button" id="cancelEdit" class="sheet-close" aria-label="Cancelar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="field">
+        <label for="editName">Nombre completo</label>
+        <input id="editName" class="input" type="text" required maxlength="300" autocomplete="off" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="editPreferred">Cómo le llamas</label>
+        <input id="editPreferred" class="input" type="text" maxlength="300" autocomplete="off" autocapitalize="words" spellcheck="false" aria-describedby="editPreferredHelp">
+        <p id="editPreferredHelp" class="help">Si lo dejas vacío, se pedirá al escanear su tarjeta.</p>
+      </div>
+      <div class="field">
+        <label for="editQR">Contenido de la tarjeta QR</label>
+        <div class="input-row">
+          <input id="editQR" class="input" type="text" maxlength="2048" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="editQRHelp">
+          <button type="button" id="clearQR" class="btn btn-secondary">Quitar</button>
+        </div>
+        <p id="editQRHelp" class="help">Déjalo vacío para vincular una tarjeta nueva la próxima vez que la escanees.</p>
+      </div>
+      <p id="editError" class="form-error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary btn-lg">Guardar cambios</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Hoja: Nombre de un grupo nuevo -->
+<dialog id="groupNameDialog" class="sheet" aria-labelledby="groupNameTitle">
+  <form id="groupNameForm" class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="groupNameTitle" class="sheet-title">Nombre del grupo</h2>
+        <p class="sheet-sub">Así aparecerá en Grupos y en el nombre de su Excel.</p>
+      </div>
+      <button type="button" id="cancelGroupName" class="sheet-close" aria-label="Cancelar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="field">
+        <label class="sr" for="groupNameInput">Nombre del grupo</label>
+        <input id="groupNameInput" class="input" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Por ejemplo, 3A" autofocus>
+      </div>
+      <p id="groupNameError" class="form-error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary btn-lg">Crear grupo</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Hoja: Confirmación -->
+<dialog id="confirmDialog" class="sheet sheet-compact" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+  <div class="sheet-inner">
+    <div class="sheet-content confirm">
+      <h2 id="confirmTitle" class="sheet-title"></h2>
+      <p id="confirmMessage" class="confirm-text"></p>
+      <div class="actions">
+        <button type="button" id="confirmOk" class="btn btn-primary btn-lg"></button>
+        <button type="button" id="confirmCancel" class="btn btn-secondary btn-lg"></button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Hoja: Vincular una tarjeta nueva -->
+<dialog id="linkDialog" class="sheet sheet-tall" aria-labelledby="linkTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="linkTitle" class="sheet-title">¿De quién es esta tarjeta?</h2>
+        <p id="linkHint" class="sheet-sub">Elige el nombre. Solo se pide la primera vez.</p>
+      </div>
+      <button type="button" id="cancelLink" class="sheet-close" aria-label="Cancelar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="search">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+        <label class="sr" for="findStudent">Buscar nombre</label>
+        <input type="search" id="findStudent" class="input" placeholder="Buscar nombre" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div id="linkStudents" class="choices"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Hoja: Nombre preferido -->
+<dialog id="nameDialog" class="sheet" aria-labelledby="nameTitle">
+  <form id="nameForm" class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="nameTitle" class="sheet-title">¿Cómo le llamas?</h2>
+        <p id="studentFullName" class="sheet-sub"></p>
+      </div>
+      <button type="button" id="cancelName" class="sheet-close" aria-label="Cancelar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <p class="help">Escribe cómo le llamas o cómo prefiere que le digan. Se recordará en las siguientes clases.</p>
+      <div class="field">
+        <label for="preferredName">Nombre para mostrar</label>
+        <input type="text" id="preferredName" class="input" required maxlength="300" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Por ejemplo, Sofi" aria-describedby="nameError" autofocus>
+      </div>
+      <p id="nameError" class="form-error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" id="saveName" class="btn btn-primary btn-lg">Guardar y registrar asistencia</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Hoja: Escribir el código manualmente -->
+<dialog id="manualDialog" class="sheet" aria-labelledby="manualTitle">
+  <form id="scanForm" class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="manualTitle" class="sheet-title">Escribir el código</h2>
+        <p class="sheet-sub">Úsalo si la cámara no lee una tarjeta.</p>
+      </div>
+      <button type="button" id="closeManual" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content">
+      <div class="field">
+        <label for="rawQR">Contenido del QR</label>
+        <input id="rawQR" class="input" type="text" required autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" autofocus>
+      </div>
+      <p id="manualError" class="form-error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary btn-lg">Registrar</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Hoja: Ayuda -->
+<dialog id="helpDialog" class="sheet sheet-tall" aria-labelledby="helpTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="helpTitle" class="sheet-title">Ayuda</h2>
+      <button type="button" id="closeHelp" class="sheet-close" aria-label="Cerrar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+    <div class="sheet-content prose">
+      <h3>Crear un grupo</h3>
+      <p>Descarga la plantilla CSV, escribe un nombre por fila en la columna nombre y cárgala. Para un grupo que ya usabas, carga su Excel más reciente.</p>
+      <h3>Pasar lista</h3>
+      <p>Toca Escanear y apunta la cámara a cada tarjeta. La primera vez que aparezca una tarjeta, elige a quién pertenece y cómo le llamas. También puedes marcar a mano desde la lista del grupo.</p>
+      <h3>Guardar el Excel</h3>
+      <p>Al finalizar, guarda el Excel que ofrece la app y reemplaza la copia anterior. Conserva la lista, las tarjetas, los nombres preferidos y el historial. No edites sus hojas fuera de la app: podría impedir su restauración.</p>
+      <h3>iDoceo</h3>
+      <p>También puedes cargar y actualizar el Excel de asistencia exportado desde iDoceo.</p>
+      <h3>Sin conexión</h3>
       <p id="offlineStatus">Preparando uso sin conexión…</p>
-      <p>Las tarjetas solo corresponden a listas cargadas en este dispositivo. Los datos no se envían a GitHub.</p>
-    </details>
-
-    <button type="button" id="logoutButton" class="text-button logout-button">Cerrar sesión</button>
-  </dialog>
-
-  <!-- Diálogo: Confirmación de salida sin guardar -->
-  <dialog id="logoutDialog" aria-labelledby="logoutTitle">
-    <h2 id="logoutTitle">Antes de cerrar</h2>
-    <p id="logoutMessage"></p>
-    <div class="logout-actions">
-      <button type="button" id="cancelLogout">Volver y guardar</button>
-      <button type="button" id="confirmLogout" class="text-button logout-button">Cerrar sin guardar</button>
+      <p>Los datos se guardan en este dispositivo. La app no los envía a GitHub ni a ningún otro servidor.</p>
     </div>
-  </dialog>
+  </div>
+</dialog>
 
-  <!-- Diálogo: Escaneo con Cámara -->
-  <dialog id="cameraDialog" aria-labelledby="cameraTitle">
-    <div class="section-head">
-      <button type="button" id="stopCamera" class="text-button">Inicio</button>
-      <h2 id="cameraTitle"></h2>
-      <button type="button" id="captureMenu" class="text-button" aria-label="Opciones del grupo">⋯</button>
-    </div>
-    <video id="video" autoplay muted playsinline aria-label="Vista previa de cámara para escanear QR"></video>
-    <div id="cameraMessage" role="status" aria-live="polite" aria-atomic="true">Apunta a una tarjeta.</div>
-    <p id="cameraCount" class="muted"></p>
-    <button type="button" id="retryCamera" class="secondary" hidden>Activar cámara</button>
-    <button type="button" id="finishCamera">Finalizar</button>
-    <button type="button" id="correctCamera" class="text-button">Corregir</button>
-  </dialog>
+<!-- Aviso sin JavaScript -->
+<noscript>
+  <p class="noscript">Esta aplicación requiere JavaScript para escanear y gestionar la asistencia.</p>
+</noscript>
 
-  <!-- Diálogo: Corrección de Asistencia y QR manual -->
-  <dialog id="correctionDialog" aria-labelledby="correctionTitle">
-    <div class="section-head">
-      <h2 id="correctionTitle">Corregir asistencia</h2>
-      <button type="button" id="closeCorrections" class="text-button">Listo</button>
-    </div>
-    <div id="attendanceList"></div>
-    <details>
-      <summary>Introducir QR como texto</summary>
-      <form id="scanForm">
-        <label for="rawQR">Contenido del QR<input id="rawQR" type="text" required autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"></label>
-        <button type="submit">Registrar</button>
-      </form>
-    </details>
-  </dialog>
-
-  <!-- Diálogo: Vincular QR a un alumno -->
-  <dialog id="linkDialog" aria-labelledby="linkTitle">
-    <div class="section-head">
-      <h2 id="linkTitle">¿De quién es este QR?</h2>
-      <button type="button" id="cancelLink" class="text-button">Cancelar</button>
-    </div>
-    <p class="muted">Solo tendrás que elegirlo esta vez.</p>
-    <label class="sr" for="findStudent">Buscar alumno</label>
-    <input type="search" id="findStudent" placeholder="Buscar alumno" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-    <div id="linkStudents"></div>
-  </dialog>
-
-  <!-- Diálogo: Nombre preferido del alumno -->
-  <dialog id="nameDialog" aria-labelledby="nameTitle">
-    <div class="section-head">
-      <h2 id="nameTitle">¿Cómo le llamas?</h2>
-      <button type="button" id="cancelName" class="text-button">Cancelar</button>
-    </div>
-    <p id="studentFullName"></p>
-    <p class="muted">Escribe cómo le llamas o cómo prefiere que le digan. Lo recordaremos para las siguientes clases.</p>
-    <form id="nameForm">
-      <label for="preferredName">Nombre para mostrar</label>
-      <input type="text" id="preferredName" required maxlength="300" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Por ejemplo, Carlos" aria-describedby="nameError">
-      <p id="nameError" role="alert"></p>
-      <button type="submit" id="saveName">Guardar y registrar asistencia</button>
-    </form>
-  </dialog>
-
-  <!-- Aviso sin JavaScript -->
-  <noscript>
-    <p style="text-align: center; padding: 20px; color: #a3384a;">
-      Esta aplicación requiere JavaScript para escanear y gestionar la asistencia.
-    </p>
-  </noscript>
-
-  <!-- Scripts -->
-  <script defer src="vendor/xlsx.mini.min.js"></script>
-  <script defer src="vendor/jsQR.js"></script>
-  <script type="module" src="app.mjs"></script>
+<!-- Scripts -->
+<script defer src="vendor/xlsx.mini.min.js"></script>
+<script defer src="vendor/jsQR.js"></script>
+<script type="module" src="app.mjs"></script>
 </body>
 </html>
